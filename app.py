@@ -29,7 +29,6 @@ DB_FILE = 'data.db'
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # 매뉴얼 테이블
     c.execute('''
         CREATE TABLE IF NOT EXISTS manuals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,7 +36,6 @@ def init_db():
             content TEXT NOT NULL
         )
     ''')
-    # 접속 로그 테이블
     c.execute('''
         CREATE TABLE IF NOT EXISTS logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +46,6 @@ def init_db():
             access_time TEXT
         )
     ''')
-    # 관리자 목록 테이블
     c.execute('''
         CREATE TABLE IF NOT EXISTS admins (
             discord_id TEXT PRIMARY KEY,
@@ -57,7 +54,6 @@ def init_db():
         )
     ''')
     
-    # 기본 매뉴얼 생성 (최초 1회)
     c.execute("SELECT COUNT(*) FROM manuals")
     if c.fetchone()[0] == 0:
         c.execute("INSERT INTO manuals (title, content) VALUES (?, ?)", 
@@ -70,7 +66,6 @@ def init_db():
 init_db()
 
 def is_admin_id(discord_id):
-    """소유자이거나 DB에 등록된 관리자인지 체크"""
     discord_id = str(discord_id)
     if discord_id == OWNER_DISCORD_ID:
         return True
@@ -122,7 +117,7 @@ def verify_admin_token(request_obj):
         return True, user_info
     return False, None
 
-# --- 웹 페이지 UI HTML (애니메이션, 커서 효과, 오로라 배경 포함) ---
+# --- 웹 페이지 UI HTML ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -137,12 +132,52 @@ HTML_TEMPLATE = """
             src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/GmarketSansBold.woff') format('woff');
             font-weight: normal; font-style: normal;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-        body { font-family: 'GmarketSansBold', 'Pretendard', sans-serif; background: #060913; color: #ffffff; overflow: hidden; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        
+        /* 🚫 보안 및 복사 방지 CSS */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+            user-select: none !important;
+            -webkit-touch-callout: none !important;
+        }
+
+        body {
+            font-family: 'GmarketSansBold', 'Pretendard', sans-serif;
+            background: #060913;
+            color: #ffffff;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
         
         #bg-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; }
         
-        .container { position: relative; z-index: 2; width: 90%; max-width: 1100px; height: 85vh; background: rgba(12, 18, 36, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(0, 255, 200, 0.3); border-radius: 20px; box-shadow: 0 0 50px rgba(0, 255, 170, 0.2); display: flex; flex-direction: column; overflow: hidden; transition: border-color 0.5s ease, box-shadow 0.5s ease; }
+        .container {
+            position: relative;
+            z-index: 2;
+            width: 90%;
+            max-width: 1100px;
+            height: 85vh;
+            background: rgba(12, 18, 36, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 255, 200, 0.3);
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(0, 255, 170, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: all 0.5s ease;
+        }
+        
+        /* 테마별 테두리 빛 효과 */
+        .container.theme-blue { border-color: rgba(0, 242, 254, 0.5); box-shadow: 0 0 50px rgba(0, 242, 254, 0.25); }
+        .container.theme-ruby { border-color: rgba(255, 45, 85, 0.5); box-shadow: 0 0 50px rgba(255, 45, 85, 0.25); }
         
         header { padding: 22px 30px; background: rgba(8, 14, 28, 0.85); border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; }
         header h1 { font-size: 22px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #4facfe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
@@ -158,21 +193,69 @@ HTML_TEMPLATE = """
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         .sidebar { width: 310px; background: rgba(0, 0, 0, 0.25); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 24px 14px; overflow-y: auto; }
         
-        .item-btn { width: 100%; text-align: left; padding: 14px 18px; background: rgba(12, 18, 36, 0.95); border: 1px solid rgba(255, 255, 255, 0.05); color: #8a99ad; border-radius: 10px; cursor: pointer; font-size: 15px; margin-bottom: 8px; transition: all 0.3s ease; }
-        .item-btn:hover { background: rgba(0, 242, 254, 0.15); color: #ffffff; border-color: rgba(0, 242, 254, 0.4); transform: translateX(4px); }
-        .item-btn.active { background: linear-gradient(90deg, rgba(0, 242, 254, 0.25), rgba(79, 172, 254, 0.25)); color: #00ffaa; border-color: #00ffaa; font-weight: bold; }
-        
+        /* 버턴 스타일 (푸른색 테마 기본) */
+        .item-btn {
+            width: 100%;
+            text-align: left;
+            padding: 14px 18px;
+            background: rgba(12, 18, 36, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #8a99ad;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 15px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        /* 🔵 푸른색 선택 테마 */
+        .item-btn.active-blue {
+            background: linear-gradient(90deg, rgba(0, 242, 254, 0.2), rgba(0, 255, 170, 0.1));
+            color: #00ffaa;
+            border: 1.5px solid #00ffaa;
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.3);
+            font-weight: bold;
+        }
+
+        /* 🔴 루비색 선택 테마 */
+        .item-btn.active-ruby {
+            background: linear-gradient(90deg, rgba(255, 45, 85, 0.25), rgba(225, 29, 72, 0.15));
+            color: #ff4d6d;
+            border: 1.5px solid #ff2d55;
+            box-shadow: 0 0 15px rgba(255, 45, 85, 0.4);
+            font-weight: bold;
+        }
+
         .main-content { flex: 1; padding: 35px; overflow-y: auto; display: flex; flex-direction: column; }
         .doc-title { font-size: 24px; margin-bottom: 22px; color: #ffffff; border-bottom: 1px solid rgba(255, 255, 255, 0.12); padding-bottom: 14px; transition: opacity 0.3s ease, transform 0.3s ease; }
         .doc-body { font-family: 'Pretendard'; font-size: 16px; line-height: 1.85; color: #e2e8f0; white-space: pre-wrap; flex: 1; transition: opacity 0.3s ease, transform 0.3s ease; }
         
         .fade-out { opacity: 0; transform: translateY(8px); }
         .fade-in { opacity: 1; transform: translateY(0); }
+
+        /* 🔒 캡처 및 백그라운드 전환시 화면 가림용 오버레이 */
+        #security-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000000;
+            z-index: 999999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            color: #ff2d55;
+            font-size: 20px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
+    <div id="security-overlay">🔒 보안 정책으로 인해 화면이 보호됩니다.</div>
     <canvas id="bg-canvas"></canvas>
-    <div class="container">
+    
+    <div class="container theme-blue" id="main-container">
         <header>
             <h1>SKY AURORA STAFF 매뉴얼</h1>
             {% if authenticated %}
@@ -192,7 +275,11 @@ HTML_TEMPLATE = """
                 <div class="sidebar">
                     <h2 style="font-size: 13px; color: #7f8c8d; margin-bottom: 18px;">MANUAL LIST</h2>
                     {% for item in manuals %}
-                        <button class="item-btn {% if loop.first %}active{% endif %}" onclick="selectManual(this, '{{ item.title }}', `{{ item.content }}`)">{{ item.title }}</button>
+                        {% if loop.index % 2 == 1 %}
+                            <button class="item-btn active-blue" onclick="selectManual(this, 'blue', '{{ item.title }}', `{{ item.content }}`)">{{ item.title }}</button>
+                        {% else %}
+                            <button class="item-btn" onclick="selectManual(this, 'ruby', '{{ item.title }}', `{{ item.content }}`)">{{ item.title }}</button>
+                        {% endif %}
                     {% endfor %}
                 </div>
                 <div class="main-content">
@@ -204,7 +291,7 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // --- 🌌 오로라 Canvas & 별 애니메이션 ---
+        // --- 🌌 오로라 Canvas (푸른색 & 루비 붉은색 파동) ---
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
         
@@ -224,15 +311,15 @@ HTML_TEMPLATE = """
             targetMouseY = e.clientY;
         });
 
-        // 별 입자들 생성
+        // 별 입자
         const stars = [];
-        for (let i = 0; i < 120; i++) {
+        for (let i = 0; i < 140; i++) {
             stars.push({
                 x: Math.random() * window.innerWidth,
                 y: Math.random() * window.innerHeight,
                 size: Math.random() * 1.8 + 0.5,
                 alpha: Math.random(),
-                speed: Math.random() * 0.015 + 0.005
+                speed: Math.random() * 0.012 + 0.004
             });
         }
 
@@ -240,8 +327,9 @@ HTML_TEMPLATE = """
 
         function drawBackground() {
             ctx.clearRect(0, 0, width, height);
+            time += 0.01;
             
-            // 1. 깜빡이는 별 그리기
+            // 1. 깜빡이는 별
             for (let star of stars) {
                 star.alpha += star.speed;
                 if (star.alpha > 1 || star.alpha < 0) star.speed = -star.speed;
@@ -251,35 +339,49 @@ HTML_TEMPLATE = """
                 ctx.fill();
             }
 
-            // 2. 푸른 오로라 배경 (기본/현재창 메인 오로라)
-            time += 0.008;
-            const blueAurora1 = ctx.createRadialGradient(width * 0.3 + Math.sin(time) * 100, height * 0.3 + Math.cos(time * 0.8) * 80, 50, width * 0.3, height * 0.3, width * 0.6);
-            blueAurora1.addColorStop(0, 'rgba(0, 242, 254, 0.22)');
-            blueAurora1.addColorStop(0.5, 'rgba(79, 172, 254, 0.12)');
-            blueAurora1.addColorStop(1, 'rgba(6, 9, 19, 0)');
+            // 2. 푸른색 오로라 파동 (배경 상단/좌측)
+            const blueA = ctx.createRadialGradient(
+                width * 0.3 + Math.sin(time) * 150, 
+                height * 0.3 + Math.cos(time * 0.7) * 100, 
+                60, 
+                width * 0.3, 
+                height * 0.3, 
+                width * 0.6
+            );
+            blueA.addColorStop(0, 'rgba(0, 242, 254, 0.28)');
+            blueA.addColorStop(0.5, 'rgba(0, 150, 255, 0.12)');
+            blueA.addColorStop(1, 'rgba(6, 9, 19, 0)');
 
-            ctx.fillStyle = blueAurora1;
+            ctx.fillStyle = blueA;
             ctx.fillRect(0, 0, width, height);
 
-            const blueAurora2 = ctx.createRadialGradient(width * 0.7 + Math.cos(time * 0.7) * 120, height * 0.7 + Math.sin(time * 0.9) * 90, 80, width * 0.7, height * 0.7, width * 0.7);
-            blueAurora2.addColorStop(0, 'rgba(0, 255, 170, 0.18)');
-            blueAurora2.addColorStop(0.5, 'rgba(0, 150, 255, 0.08)');
-            blueAurora2.addColorStop(1, 'rgba(6, 9, 19, 0)');
+            // 3. 루비 붉은색 오로라 파동 (배경 하단/우측)
+            const rubyA = ctx.createRadialGradient(
+                width * 0.7 + Math.cos(time * 0.8) * 160, 
+                height * 0.7 + Math.sin(time * 0.9) * 110, 
+                80, 
+                width * 0.7, 
+                height * 0.7, 
+                width * 0.65
+            );
+            rubyA.addColorStop(0, 'rgba(255, 45, 85, 0.25)');
+            rubyA.addColorStop(0.5, 'rgba(225, 29, 72, 0.1)');
+            rubyA.addColorStop(1, 'rgba(6, 9, 19, 0)');
 
-            ctx.fillStyle = blueAurora2;
+            ctx.fillStyle = rubyA;
             ctx.fillRect(0, 0, width, height);
 
-            // 3. 마우스 커서 추적: 붉은 루비 계열 오로라 
+            // 4. 마우스 커서 루비 붉은색 오로라 추적
             mouseX += (targetMouseX - mouseX) * 0.08;
             mouseY += (targetMouseY - mouseY) * 0.08;
 
             if (mouseX > 0 && mouseY > 0) {
-                const rubyCursorAurora = ctx.createRadialGradient(mouseX, mouseY, 10, mouseX, mouseY, 320);
-                rubyCursorAurora.addColorStop(0, 'rgba(255, 45, 85, 0.35)');   // 루비 붉은빛
-                rubyCursorAurora.addColorStop(0.4, 'rgba(225, 29, 72, 0.18)'); // 디프 루비
-                rubyCursorAurora.addColorStop(1, 'rgba(6, 9, 19, 0)');
+                const rubyCursor = ctx.createRadialGradient(mouseX, mouseY, 10, mouseX, mouseY, 300);
+                rubyCursor.addColorStop(0, 'rgba(255, 45, 85, 0.4)');
+                rubyCursor.addColorStop(0.5, 'rgba(225, 29, 72, 0.18)');
+                rubyCursor.addColorStop(1, 'rgba(6, 9, 19, 0)');
 
-                ctx.fillStyle = rubyCursorAurora;
+                ctx.fillStyle = rubyCursor;
                 ctx.fillRect(0, 0, width, height);
             }
 
@@ -287,10 +389,21 @@ HTML_TEMPLATE = """
         }
         drawBackground();
 
-        // --- 📑 매뉴얼 클릭 및 전환 애니메이션 ---
-        function selectManual(btn, title, content) {
-            document.querySelectorAll('.item-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+        // --- 📑 매뉴얼 클릭 시 색상 및 전환 애니메이션 ---
+        function selectManual(btn, themeColor, title, content) {
+            document.querySelectorAll('.item-btn').forEach(b => {
+                b.classList.remove('active-blue', 'active-ruby');
+            });
+
+            const mainContainer = document.getElementById('main-container');
+
+            if (themeColor === 'ruby') {
+                btn.classList.add('active-ruby');
+                mainContainer.className = 'container theme-ruby';
+            } else {
+                btn.classList.add('active-blue');
+                mainContainer.className = 'container theme-blue';
+            }
 
             const titleElem = document.getElementById('doc-title');
             const bodyElem = document.getElementById('doc-body');
@@ -308,6 +421,48 @@ HTML_TEMPLATE = """
                 bodyElem.classList.add('fade-in');
             }, 200);
         }
+
+        // ==========================================
+        // 🔒 강력한 보안 / 캡처 방지 및 꼼수 차단
+        // ==========================================
+        const overlay = document.getElementById('security-overlay');
+
+        // 1. 우클릭, 드래그, 텍스트 선택 방지
+        document.addEventListener('contextmenu', e => e.preventDefault());
+        document.addEventListener('selectstart', e => e.preventDefault());
+        document.addEventListener('dragstart', e => e.preventDefault());
+
+        // 2. 단축키 차단 (PrtScn, F12, Ctrl+S, Ctrl+P, Ctrl+Shift+I 등)
+        document.addEventListener('keydown', (e) => {
+            if (
+                e.key === 'PrintScreen' ||
+                e.keyCode === 44 ||
+                e.keyCode === 123 || // F12
+                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
+                (e.ctrlKey && (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P' || e.key === 'u' || e.key === 'U'))
+            ) {
+                e.preventDefault();
+                alert('🔒 보안 정책으로 인해 해당 동작 및 캡처 단축키는 사용할 수 없습니다.');
+            }
+        });
+
+        // 3. 모바일/PC 화면 이탈 및 최근 앱 보기(App Switcher) 꼼수 방지
+        function hideScreen() {
+            overlay.style.display = 'flex';
+        }
+        function showScreen() {
+            overlay.style.display = 'none';
+        }
+
+        window.addEventListener('blur', hideScreen);
+        window.addEventListener('focus', showScreen);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                hideScreen();
+            } else {
+                showScreen();
+            }
+        });
     </script>
 </body>
 </html>
@@ -343,14 +498,12 @@ def logout():
     return redirect(url_for('index'))
 
 # ==========================================
-# 🛠️ 관리자 앱 통신 API
+# 🛠️ 관리자 API
 # ==========================================
 @app.route('/api/admin/logs', methods=['GET'])
 def api_get_logs():
     is_admin, _ = verify_admin_token(request)
-    if not is_admin:
-        return jsonify({"error": "Unauthorized"}), 403
-        
+    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT id, discord_id, username, ip_address, device_info, access_time FROM logs ORDER BY id DESC LIMIT 100")
@@ -361,9 +514,7 @@ def api_get_logs():
 @app.route('/api/admin/manuals', methods=['POST'])
 def api_update_manuals():
     is_admin, _ = verify_admin_token(request)
-    if not is_admin:
-        return jsonify({"error": "Unauthorized"}), 403
-        
+    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
     data = request.json
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -377,9 +528,7 @@ def api_update_manuals():
 @app.route('/api/admin/users', methods=['GET'])
 def api_get_admins():
     is_admin, _ = verify_admin_token(request)
-    if not is_admin:
-        return jsonify({"error": "Unauthorized"}), 403
-        
+    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT discord_id, memo, created_at FROM admins ORDER BY created_at DESC")
@@ -390,16 +539,13 @@ def api_get_admins():
 @app.route('/api/admin/users/add', methods=['POST'])
 def api_add_admin():
     is_admin, _ = verify_admin_token(request)
-    if not is_admin:
-        return jsonify({"error": "Unauthorized"}), 403
-        
+    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
     data = request.json
     discord_id = str(data.get('discord_id', '')).strip()
     memo = data.get('memo', '')
     now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    if not discord_id:
-        return jsonify({"error": "디스코드 ID가 필요합니다."}), 400
+    if not discord_id: return jsonify({"error": "디스코드 ID가 필요합니다."}), 400
 
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -411,9 +557,7 @@ def api_add_admin():
 @app.route('/api/admin/users/delete', methods=['POST'])
 def api_delete_admin():
     is_admin, _ = verify_admin_token(request)
-    if not is_admin:
-        return jsonify({"error": "Unauthorized"}), 403
-        
+    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
     data = request.json
     discord_id = str(data.get('discord_id', '')).strip()
 
@@ -426,4 +570,3 @@ def api_delete_admin():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
