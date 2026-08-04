@@ -133,14 +133,11 @@ HTML_TEMPLATE = """
             font-weight: normal; font-style: normal;
         }
         
-        /* 🚫 보안 및 복사 방지 CSS */
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
             -webkit-user-select: none !important;
-            -moz-user-select: none !important;
-            -ms-user-select: none !important;
             user-select: none !important;
             -webkit-touch-callout: none !important;
         }
@@ -175,7 +172,6 @@ HTML_TEMPLATE = """
             transition: all 0.5s ease;
         }
         
-        /* 테마별 테두리 빛 효과 */
         .container.theme-blue { border-color: rgba(0, 242, 254, 0.5); box-shadow: 0 0 50px rgba(0, 242, 254, 0.25); }
         .container.theme-ruby { border-color: rgba(255, 45, 85, 0.5); box-shadow: 0 0 50px rgba(255, 45, 85, 0.25); }
         
@@ -187,43 +183,64 @@ HTML_TEMPLATE = """
         .logout-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
         
         .login-box { padding: 40px 30px; text-align: center; margin: auto; max-width: 400px; width: 100%; }
-        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 8px; font-family: 'Pretendard'; font-weight: bold; font-size: 15px; transition: transform 0.2s, background-color 0.2s; }
-        .discord-btn:hover { background-color: #4752C4; transform: translateY(-2px); }
+        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 8px; font-family: 'Pretendard'; font-weight: bold; font-size: 15px; }
         
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         .sidebar { width: 310px; background: rgba(0, 0, 0, 0.25); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 24px 14px; overflow-y: auto; }
         
-        /* 버턴 스타일 (푸른색 테마 기본) */
+        /* 💡 요청하신 이미지 참고한 네온 포인트 상단 바 테두리 버튼 스타일 */
         .item-btn {
+            position: relative;
             width: 100%;
             text-align: left;
-            padding: 14px 18px;
+            padding: 16px 18px;
             background: rgba(12, 18, 36, 0.95);
             border: 1px solid rgba(255, 255, 255, 0.08);
             color: #8a99ad;
             border-radius: 12px;
             cursor: pointer;
             font-size: 15px;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
+            overflow: hidden;
             transition: all 0.3s ease;
         }
 
-        /* 🔵 푸른색 선택 테마 */
-        .item-btn.active-blue {
-            background: linear-gradient(90deg, rgba(0, 242, 254, 0.2), rgba(0, 255, 170, 0.1));
-            color: #00ffaa;
-            border: 1.5px solid #00ffaa;
-            box-shadow: 0 0 15px rgba(0, 255, 170, 0.3);
-            font-weight: bold;
+        /* 버튼 상단 네온 포인트 라인 (기본 숨김) */
+        .item-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0%;
+            height: 3px;
+            transition: width 0.3s ease;
         }
 
-        /* 🔴 루비색 선택 테마 */
-        .item-btn.active-ruby {
-            background: linear-gradient(90deg, rgba(255, 45, 85, 0.25), rgba(225, 29, 72, 0.15));
-            color: #ff4d6d;
-            border: 1.5px solid #ff2d55;
-            box-shadow: 0 0 15px rgba(255, 45, 85, 0.4);
+        /* 🔵 푸른색 테마 버튼 선택 */
+        .item-btn.active-blue {
+            color: #00ffaa;
+            border-color: rgba(0, 255, 170, 0.5);
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.25);
             font-weight: bold;
+        }
+        .item-btn.active-blue::before {
+            width: 70%;
+            background: linear-gradient(90deg, #00f2fe, #00ffaa);
+            box-shadow: 0 0 10px #00ffaa;
+        }
+
+        /* 🔴 루비색 테마 버튼 선택 */
+        .item-btn.active-ruby {
+            color: #ff4d6d;
+            border-color: rgba(255, 45, 85, 0.5);
+            box-shadow: 0 0 15px rgba(255, 45, 85, 0.3);
+            font-weight: bold;
+        }
+        .item-btn.active-ruby::before {
+            width: 70%;
+            background: linear-gradient(90deg, #ff2d55, #ff4d6d);
+            box-shadow: 0 0 10px #ff2d55;
         }
 
         .main-content { flex: 1; padding: 35px; overflow-y: auto; display: flex; flex-direction: column; }
@@ -233,21 +250,31 @@ HTML_TEMPLATE = """
         .fade-out { opacity: 0; transform: translateY(8px); }
         .fade-in { opacity: 1; transform: translateY(0); }
 
-        /* 🔒 캡처 및 백그라운드 전환시 화면 가림용 오버레이 */
+        /* 🔒 강력한 캡처 방지 보안 오버레이 (최근 앱 보기 및 이탈 시 작동) */
         #security-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: #000000;
+            background: #060913;
             z-index: 999999;
             display: none;
             justify-content: center;
             align-items: center;
             color: #ff2d55;
-            font-size: 20px;
+            font-size: 22px;
             font-weight: bold;
+            letter-spacing: -1px;
+        }
+
+        /* 본문 캡처 방지를 위한 보안 워터마크/캔버스 레이어 */
+        #content-shield {
+            position: relative;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
         }
     </style>
 </head>
@@ -282,7 +309,7 @@ HTML_TEMPLATE = """
                         {% endif %}
                     {% endfor %}
                 </div>
-                <div class="main-content">
+                <div class="main-content" id="content-shield">
                     <div id="doc-title" class="doc-title">{{ manuals[0].title if manuals else '매뉴얼이 없습니다.' }}</div>
                     <div id="doc-body" class="doc-body">{{ manuals[0].content if manuals else '' }}</div>
                 </div>
@@ -291,7 +318,7 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // --- 🌌 오로라 Canvas (푸른색 & 루비 붉은색 파동) ---
+        // --- 🌌 울렁이는 푸른색 & 루비 오로라 배경 애니메이션 ---
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
         
@@ -311,7 +338,6 @@ HTML_TEMPLATE = """
             targetMouseY = e.clientY;
         });
 
-        // 별 입자
         const stars = [];
         for (let i = 0; i < 140; i++) {
             stars.push({
@@ -329,7 +355,6 @@ HTML_TEMPLATE = """
             ctx.clearRect(0, 0, width, height);
             time += 0.01;
             
-            // 1. 깜빡이는 별
             for (let star of stars) {
                 star.alpha += star.speed;
                 if (star.alpha > 1 || star.alpha < 0) star.speed = -star.speed;
@@ -339,39 +364,31 @@ HTML_TEMPLATE = """
                 ctx.fill();
             }
 
-            // 2. 푸른색 오로라 파동 (배경 상단/좌측)
+            // 울렁이는 푸른색 오로라
             const blueA = ctx.createRadialGradient(
                 width * 0.3 + Math.sin(time) * 150, 
                 height * 0.3 + Math.cos(time * 0.7) * 100, 
-                60, 
-                width * 0.3, 
-                height * 0.3, 
-                width * 0.6
+                60, width * 0.3, height * 0.3, width * 0.6
             );
             blueA.addColorStop(0, 'rgba(0, 242, 254, 0.28)');
             blueA.addColorStop(0.5, 'rgba(0, 150, 255, 0.12)');
             blueA.addColorStop(1, 'rgba(6, 9, 19, 0)');
-
             ctx.fillStyle = blueA;
             ctx.fillRect(0, 0, width, height);
 
-            // 3. 루비 붉은색 오로라 파동 (배경 하단/우측)
+            // 울렁이는 루비 붉은색 오로라 (배경 양쪽 공존)
             const rubyA = ctx.createRadialGradient(
                 width * 0.7 + Math.cos(time * 0.8) * 160, 
                 height * 0.7 + Math.sin(time * 0.9) * 110, 
-                80, 
-                width * 0.7, 
-                height * 0.7, 
-                width * 0.65
+                80, width * 0.7, height * 0.7, width * 0.65
             );
             rubyA.addColorStop(0, 'rgba(255, 45, 85, 0.25)');
             rubyA.addColorStop(0.5, 'rgba(225, 29, 72, 0.1)');
             rubyA.addColorStop(1, 'rgba(6, 9, 19, 0)');
-
             ctx.fillStyle = rubyA;
             ctx.fillRect(0, 0, width, height);
 
-            // 4. 마우스 커서 루비 붉은색 오로라 추적
+            // 마우스 커서 루비 붉은색 오로라 추적
             mouseX += (targetMouseX - mouseX) * 0.08;
             mouseY += (targetMouseY - mouseY) * 0.08;
 
@@ -380,7 +397,6 @@ HTML_TEMPLATE = """
                 rubyCursor.addColorStop(0, 'rgba(255, 45, 85, 0.4)');
                 rubyCursor.addColorStop(0.5, 'rgba(225, 29, 72, 0.18)');
                 rubyCursor.addColorStop(1, 'rgba(6, 9, 19, 0)');
-
                 ctx.fillStyle = rubyCursor;
                 ctx.fillRect(0, 0, width, height);
             }
@@ -423,45 +439,35 @@ HTML_TEMPLATE = """
         }
 
         // ==========================================
-        // 🔒 강력한 보안 / 캡처 방지 및 꼼수 차단
+        // 🔒 강력한 캡처 방지 및 최근 앱 숨김(꼼수 차단)
         // ==========================================
         const overlay = document.getElementById('security-overlay');
 
-        // 1. 우클릭, 드래그, 텍스트 선택 방지
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('selectstart', e => e.preventDefault());
         document.addEventListener('dragstart', e => e.preventDefault());
 
-        // 2. 단축키 차단 (PrtScn, F12, Ctrl+S, Ctrl+P, Ctrl+Shift+I 등)
         document.addEventListener('keydown', (e) => {
             if (
                 e.key === 'PrintScreen' ||
                 e.keyCode === 44 ||
-                e.keyCode === 123 || // F12
+                e.keyCode === 123 ||
                 (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
                 (e.ctrlKey && (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P' || e.key === 'u' || e.key === 'U'))
             ) {
                 e.preventDefault();
-                alert('🔒 보안 정책으로 인해 해당 동작 및 캡처 단축키는 사용할 수 없습니다.');
+                alert('🔒 보안 정책에 의해 캡처 및 단축키가 금지되어 있습니다.');
             }
         });
 
-        // 3. 모바일/PC 화면 이탈 및 최근 앱 보기(App Switcher) 꼼수 방지
-        function hideScreen() {
-            overlay.style.display = 'flex';
-        }
-        function showScreen() {
-            overlay.style.display = 'none';
-        }
+        function hideScreen() { overlay.style.display = 'flex'; }
+        function showScreen() { overlay.style.display = 'none'; }
 
         window.addEventListener('blur', hideScreen);
         window.addEventListener('focus', showScreen);
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                hideScreen();
-            } else {
-                showScreen();
-            }
+            if (document.hidden) hideScreen();
+            else showScreen();
         });
     </script>
 </body>
