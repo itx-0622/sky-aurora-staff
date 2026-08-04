@@ -9,6 +9,22 @@ app.secret_key = 'sky_aurora_secret_key_9988'
 VALID_AUTH_CODE = "1234"
 ACCESS_LOGS = []
 
+# --------------------------------------------------
+# 🔑 디스코드 OAuth2 설정 (이 위치에 추가되었습니다)
+# --------------------------------------------------
+DISCORD_CLIENT_ID = "1534184089144266872"
+DISCORD_CLIENT_SECRET = "ekHMzJEF519uQiAn94PuOPxER-51IH5s"
+DISCORD_REDIRECT_URI = "https://sky-aurora-staff.onrender.com/callback"
+
+# 디스코드 OAuth2 인증 URL 생성용
+DISCORD_AUTH_URL = (
+    f"https://discord.com/api/oauth2/authorize"
+    f"?client_id={DISCORD_CLIENT_ID}"
+    f"&redirect_uri={DISCORD_REDIRECT_URI}"
+    f"&response_type=code"
+    f"&scope=identify%20email"
+)
+
 MANUALS = [
     {
         "id": 1,
@@ -62,7 +78,7 @@ HTML_TEMPLATE = """
             -moz-user-select: none;
             -ms-user-select: none;
             user-select: none;
-            -webkit-touch-callout: none; /* 모바일 길게 누르기 메뉴 차단 */
+            -webkit-touch-callout: none;
         }
         body {
             font-family: 'GmarketSansBold', 'Pretendard', sans-serif;
@@ -76,7 +92,6 @@ HTML_TEMPLATE = """
             transition: filter 0.15s ease, opacity 0.15s ease;
         }
 
-        /* 🔒 보안 가림막 (캡처 / 창 이탈 / 모바일 전환 시 적용) */
         body.security-blur {
             filter: blur(50px) grayscale(100%);
             opacity: 0.05;
@@ -123,6 +138,11 @@ HTML_TEMPLATE = """
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
+        header .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
         header .logout-btn {
             font-family: 'Pretendard', sans-serif;
             color: #8a99ad;
@@ -139,7 +159,7 @@ HTML_TEMPLATE = """
         }
 
         .login-box {
-            padding: 50px 30px;
+            padding: 40px 30px;
             text-align: center;
             margin: auto;
             max-width: 400px;
@@ -149,7 +169,7 @@ HTML_TEMPLATE = """
             font-family: 'Pretendard', sans-serif;
             width: 100%;
             padding: 12px 16px;
-            margin-top: 20px;
+            margin-top: 15px;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 8px;
@@ -162,6 +182,46 @@ HTML_TEMPLATE = """
             border-color: #00ffaa;
             box-shadow: 0 0 10px rgba(0, 255, 170, 0.3);
         }
+
+        /* 🟣 디스코드 로그인 버튼 스타일 */
+        .discord-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 12px;
+            background: #5865F2;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-family: 'Pretendard', sans-serif;
+            font-weight: bold;
+            font-size: 15px;
+            transition: background 0.2s, transform 0.2s;
+            margin-bottom: 20px;
+        }
+        .discord-btn:hover {
+            background: #4752C4;
+            transform: translateY(-2px);
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: #5865f2;
+            margin: 15px 0;
+            font-size: 12px;
+            font-family: 'Pretendard', sans-serif;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .divider:not(:empty)::before { margin-right: .5em; }
+        .divider:not(:empty)::after { margin-left: .5em; }
 
         .dashboard {
             display: flex;
@@ -183,7 +243,6 @@ HTML_TEMPLATE = """
             padding-left: 8px;
         }
 
-        /* ✨ 오로라 버튼 스타일 ✨ */
         .aurora-btn-wrapper {
             position: relative;
             margin-bottom: 12px;
@@ -214,9 +273,7 @@ HTML_TEMPLATE = """
             transition: opacity 0.3s ease;
         }
 
-        .aurora-btn-wrapper:hover::before {
-            opacity: 1;
-        }
+        .aurora-btn-wrapper:hover::before { opacity: 1; }
         .aurora-btn-wrapper:hover {
             transform: translateY(-2px);
             box-shadow: 0 0 18px rgba(255, 0, 128, 0.35);
@@ -254,9 +311,7 @@ HTML_TEMPLATE = """
             display: block;
         }
 
-        .aurora-btn-wrapper:hover .item-btn {
-            color: #ff77c6;
-        }
+        .aurora-btn-wrapper:hover .item-btn { color: #ff77c6; }
         .aurora-btn-wrapper.active .item-btn {
             color: #00ffaa;
             font-weight: bold;
@@ -294,15 +349,12 @@ HTML_TEMPLATE = """
         }
     </style>
     <script>
-        // 우클릭 및 스마트폰 긴 터치 방지
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('touchstart', function(e) {
-            if (e.touches.length > 1) e.preventDefault(); // 다중 터치 캡처 시도 차단
+            if (e.touches.length > 1) e.preventDefault();
         }, { passive: false });
 
-        // PC 캡처 키 및 Win+Shift+S 감지 시 강제 블러
         document.addEventListener('keydown', function(e) {
-            // Windows 키, Shift 키, PrintScreen 또는 캡처 관련 조합키 입력 시 화면 가림
             if (e.key === 'PrintScreen' || e.key === 'Meta' || e.key === 'OS' || (e.shiftKey && e.key === 'S')) {
                 document.body.classList.add('security-blur');
                 navigator.clipboard.writeText('');
@@ -317,22 +369,13 @@ HTML_TEMPLATE = """
             }
         });
 
-        // 모바일/PC 포커스 이탈, 화면 전환, 최근 앱 진입 시 무조건 암전/블러 처리
-        function enableBlur() {
-            document.body.classList.add('security-blur');
-        }
-        function disableBlur() {
-            document.body.classList.remove('security-blur');
-        }
+        function enableBlur() { document.body.classList.add('security-blur'); }
+        function disableBlur() { document.body.classList.remove('security-blur'); }
 
         window.addEventListener('blur', enableBlur);
         window.addEventListener('focus', disableBlur);
         document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
-                enableBlur();
-            } else {
-                disableBlur();
-            }
+            if (document.hidden) { enableBlur(); } else { disableBlur(); }
         });
 
         function selectManual(btnElement) {
@@ -355,21 +398,37 @@ HTML_TEMPLATE = """
         <header>
             <h1>SKY AURORA STAFF 매뉴얼</h1>
             {% if authenticated %}
-                <a href="/logout" class="logout-btn">로그아웃</a>
+                <div class="user-info">
+                    <span style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard';">
+                        👤 {{ username }}
+                    </span>
+                    <a href="/logout" class="logout-btn">로그아웃</a>
+                </div>
             {% endif %}
         </header>
 
         {% if not authenticated %}
             <div class="login-box">
-                <h2 style="font-size: 19px; color: #e2e8f0;">🔒 스태프 인증</h2>
-                <p style="font-size: 13px; color: #8a99ad; margin-top: 8px; font-family: 'Pretendard';">인가된 접근 코드를 입력해 주세요.</p>
+                <h2 style="font-size: 19px; color: #e2e8f0; margin-bottom: 20px;">🔒 스태프 인증</h2>
+                
+                <!-- 🟣 디스코드 로그인 버튼 추가 -->
+                <a href="/login/discord" class="discord-btn">
+                    <svg width="20" height="15" viewBox="0 0 127.14 96.36" fill="currentColor">
+                        <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1,105.25,105.25,0,0,0,32.19-16.14c2.64-27.38-4.51-51.11-18.91-72.15ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.87,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.1,53,91.08,65.69,84.69,65.69Z"/>
+                    </svg>
+                    Discord 계정으로 로그인
+                </a>
+
+                <div class="divider">OR</div>
+
                 {% if error %}
                     <div class="alert-error" style="color:#ff5555; margin-top:10px;">{{ error }}</div>
                 {% endif %}
+
                 <form method="POST" action="/login">
                     <input type="password" name="auth_code" placeholder="인증코드 입력" required autocomplete="off">
                     <div class="aurora-btn-wrapper active" style="margin-top: 18px;">
-                        <button type="submit" class="item-btn" style="text-align: center; font-family: 'GmarketSansBold'; font-size: 16px;">인증하기</button>
+                        <button type="submit" class="item-btn" style="text-align: center; font-family: 'GmarketSansBold'; font-size: 16px;">인증코드로 로그인</button>
                     </div>
                 </form>
             </div>
@@ -397,7 +456,6 @@ HTML_TEMPLATE = """
         {% endif %}
     </div>
 
-    <!-- 배경 애니메이션 -->
     <script>
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
@@ -488,11 +546,81 @@ HTML_TEMPLATE = """
 @app.route('/')
 def index():
     is_auth = session.get('authenticated', False)
+    username = session.get('username', '스태프')
     return render_template_string(
         HTML_TEMPLATE, 
         authenticated=is_auth, 
+        username=username,
         manuals=MANUALS
     )
+
+# --------------------------------------------------
+# 🔑 디스코드 로그인 페이지 리다이렉트 라우트
+# --------------------------------------------------
+@app.route('/login/discord')
+def login_discord():
+    return redirect(DISCORD_AUTH_URL)
+
+# --------------------------------------------------
+# 🔑 디스코드 OAuth2 Callback 처리 라우트 (추가된 주요 부분)
+# --------------------------------------------------
+@app.route('/callback')
+def callback():
+    code = request.args.get('code')
+    if not code:
+        return render_template_string(
+            HTML_TEMPLATE, 
+            authenticated=False, 
+            error="❌ 디스코드 인증에 실패했습니다.",
+            manuals=MANUALS
+        )
+
+    # 1. Access Token 요청
+    data = {
+        'client_id': DISCORD_CLIENT_ID,
+        'client_secret': DISCORD_CLIENT_SECRET,
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': DISCORD_REDIRECT_URI
+    }
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    
+    token_res = requests.post('https://discord.com/api/v10/oauth2/token', data=data, headers=headers)
+    token_json = token_res.json()
+
+    access_token = token_json.get('access_token')
+    if not access_token:
+        return render_template_string(
+            HTML_TEMPLATE, 
+            authenticated=False, 
+            error="❌ 토큰 발급에 실패했습니다.",
+            manuals=MANUALS
+        )
+
+    # 2. 로그인한 디스코드 유저 정보 요청
+    user_headers = {'Authorization': f'Bearer {access_token}'}
+    user_res = requests.get('https://discord.com/api/v10/users/@me', headers=user_headers)
+    user_data = user_res.json()
+
+    # 3. 로그인 성공 처리
+    user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if user_ip and ',' in user_ip:
+        user_ip = user_ip.split(',')[0].strip()
+
+    location_info = get_location_from_ip(user_ip)
+    now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    ACCESS_LOGS.insert(0, {
+        "ip": user_ip,
+        "location": location_info,
+        "time": now_time,
+        "user": user_data.get('username')
+    })
+
+    session['authenticated'] = True
+    session['username'] = user_data.get('global_name') or user_data.get('username')
+    
+    return redirect(url_for('index'))
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -508,11 +636,13 @@ def login():
     ACCESS_LOGS.insert(0, {
         "ip": user_ip,
         "location": location_info,
-        "time": now_time
+        "time": now_time,
+        "user": "인증코드 접속"
     })
 
     if entered_code == VALID_AUTH_CODE:
         session['authenticated'] = True
+        session['username'] = "스태프(코드인증)"
         return redirect(url_for('index'))
     else:
         return render_template_string(
@@ -525,8 +655,8 @@ def login():
 @app.route('/logout')
 def logout():
     session.pop('authenticated', None)
+    session.pop('username', None)
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    # host='0.0.0.0'으로 변경하여 로컬 네트워크(동일 Wi-Fi) 접속 허용
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
