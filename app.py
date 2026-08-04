@@ -10,7 +10,7 @@ app.secret_key = 'sky_aurora_secret_key_9988'
 # ==========================================
 # ⚙️ 최초 소유자(Owner) 디스코드 ID 설정
 # ==========================================
-OWNER_DISCORD_ID = "843621337066504225"  # <- 요청하신 사용자 ID 적용 완료!
+OWNER_DISCORD_ID = "843621337066504225"
 
 DISCORD_CLIENT_ID = "1534184089144266872"
 DISCORD_CLIENT_SECRET = "ekHMzJEF519uQiAn94PuOPxER-51IH5s"
@@ -107,7 +107,6 @@ def get_manuals():
     return [{"id": r[0], "title": r[1], "content": r[2]} for r in rows]
 
 def verify_admin_token(request_obj):
-    """토큰 기반 관리자 권한 확인"""
     auth_header = request_obj.headers.get('Authorization')
     if not auth_header or not auth_header.startswith("Bearer "):
         return False, None
@@ -145,12 +144,15 @@ HTML_TEMPLATE = """
         header { padding: 22px 30px; background: rgba(8, 14, 28, 0.85); border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; }
         header h1 { font-size: 22px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #4facfe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .user-info { display: flex; align-items: center; gap: 12px; }
-        .logout-btn { color: #8a99ad; text-decoration: none; font-size: 13px; padding: 6px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; }
+        .logout-btn { color: #8a99ad; text-decoration: none; font-size: 13px; padding: 6px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; transition: all 0.2s; }
+        .logout-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
         .login-box { padding: 40px 30px; text-align: center; margin: auto; max-width: 400px; width: 100%; }
-        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 8px; font-family: 'Pretendard'; font-weight: bold; font-size: 15px; }
+        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 8px; font-family: 'Pretendard'; font-weight: bold; font-size: 15px; transition: all 0.2s; }
+        .discord-btn:hover { background: #4752C4; transform: translateY(-2px); }
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         .sidebar { width: 310px; background: rgba(0, 0, 0, 0.25); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 24px 14px; overflow-y: auto; }
-        .item-btn { width: 100%; text-align: left; padding: 14px 18px; background: rgba(12, 18, 36, 0.95); border: none; color: #8a99ad; border-radius: 10px; cursor: pointer; font-size: 15px; margin-bottom: 8px; }
+        .item-btn { width: 100%; text-align: left; padding: 14px 18px; background: rgba(12, 18, 36, 0.6); border: 1px solid rgba(255, 255, 255, 0.05); color: #8a99ad; border-radius: 10px; cursor: pointer; font-size: 15px; margin-bottom: 8px; transition: all 0.2s; font-family: 'GmarketSansBold'; }
+        .item-btn:hover, .item-btn.active { background: linear-gradient(90deg, rgba(0, 242, 254, 0.15), rgba(0, 255, 170, 0.15)); border-color: rgba(0, 255, 200, 0.4); color: #ffffff; }
         .main-content { flex: 1; padding: 35px; overflow-y: auto; display: flex; flex-direction: column; }
         .doc-title { font-size: 24px; margin-bottom: 22px; color: #ffffff; border-bottom: 1px solid rgba(255, 255, 255, 0.12); padding-bottom: 14px; }
         .doc-body { font-family: 'Pretendard'; font-size: 16px; line-height: 1.85; color: #e2e8f0; white-space: pre-wrap; flex: 1; }
@@ -178,7 +180,7 @@ HTML_TEMPLATE = """
                 <div class="sidebar">
                     <h2 style="font-size: 13px; color: #7f8c8d; margin-bottom: 18px;">MANUAL LIST</h2>
                     {% for item in manuals %}
-                        <button class="item-btn" onclick="document.getElementById('doc-title').innerText='{{ item.title }}'; document.getElementById('doc-body').innerText='{{ item.content }}';">{{ item.title }}</button>
+                        <button class="item-btn {% if loop.first %}active{% endif %}" onclick="selectManual(this, '{{ item.title }}', `{{ item.content }}`)">{{ item.title }}</button>
                     {% endfor %}
                 </div>
                 <div class="main-content">
@@ -188,6 +190,58 @@ HTML_TEMPLATE = """
             </div>
         {% endif %}
     </div>
+
+    <script>
+        // --- 1. 백그라운드 별빛/파티클 애니메이션 ---
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        let stars = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initStars();
+        }
+
+        function initStars() {
+            stars = [];
+            const count = Math.floor((canvas.width * canvas.height) / 3000);
+            for (let i = 0; i < count; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    radius: Math.random() * 1.5,
+                    alpha: Math.random(),
+                    speed: Math.random() * 0.01 + 0.005
+                });
+            }
+        }
+
+        function animateStars() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            stars.forEach(star => {
+                star.alpha += star.speed;
+                if (star.alpha > 1 || star.alpha < 0) star.speed = -star.speed;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 255, 200, ${Math.abs(star.alpha)})`;
+                ctx.fill();
+            });
+            requestAnimationFrame(animateStars);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        animateStars();
+
+        // --- 2. 매뉴얼 전환 스크립트 ---
+        function selectManual(btn, title, content) {
+            document.querySelectorAll('.item-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('doc-title').innerText = title;
+            document.getElementById('doc-body').innerText = content;
+        }
+    </script>
 </body>
 </html>
 """
@@ -253,7 +307,6 @@ def api_update_manuals():
     conn.close()
     return jsonify({"status": "success"})
 
-# --- 👥 관리자 목록 조회 API ---
 @app.route('/api/admin/users', methods=['GET'])
 def api_get_admins():
     is_admin, _ = verify_admin_token(request)
@@ -267,7 +320,6 @@ def api_get_admins():
     conn.close()
     return jsonify(admins)
 
-# --- ➕ 관리자 추가 API ---
 @app.route('/api/admin/users/add', methods=['POST'])
 def api_add_admin():
     is_admin, _ = verify_admin_token(request)
@@ -289,7 +341,6 @@ def api_add_admin():
     conn.close()
     return jsonify({"status": "success"})
 
-# --- ❌ 관리자 삭제 API ---
 @app.route('/api/admin/users/delete', methods=['POST'])
 def api_delete_admin():
     is_admin, _ = verify_admin_token(request)
