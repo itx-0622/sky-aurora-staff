@@ -1,17 +1,22 @@
 import os
 import requests
-import sqlite3
 from datetime import datetime
 from flask import Flask, request, render_template_string, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
 app.secret_key = 'sky_aurora_secret_key_9988'
 
-# ==========================================
-# ⚙️ 최초 소유자(Owner) 디스코드 ID 설정
-# ==========================================
-OWNER_DISCORD_ID = "843621337066504225"
+VALID_AUTH_CODE = "1234"
+ACCESS_LOGS = []
 
+# ==========================================
+# ⚙️ 관리자(오너) 디스코드 ID 설정 (로그 확인용)
+# ==========================================
+OWNER_DISCORD_ID = "843621337066504225" # 본인의 디스코드 숫자 ID로 변경 가능
+
+# --------------------------------------------------
+# 🔑 디스코드 OAuth2 설정
+# --------------------------------------------------
 DISCORD_CLIENT_ID = "1534184089144266872"
 DISCORD_CLIENT_SECRET = "ekHMzJEF519uQiAn94PuOPxER-51IH5s"
 DISCORD_REDIRECT_URI = "https://sky-aurora-staff.onrender.com/callback"
@@ -24,100 +29,35 @@ DISCORD_AUTH_URL = (
     f"&scope=identify%20email"
 )
 
-DB_FILE = 'data.db'
+MANUALS = [
+    {
+        "id": 1,
+        "title": "01. 기본 보안 지침",
+        "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템의 화면을 캡처하거나 촬영하는 행위를 금지합니다.\n2. 인증 계정 및 코드는 타인에게 공유할 수 없습니다.\n3. 시스템 이용 시 접속 IP 및 접근 위치가 실시간 기록됩니다."
+    },
+    {
+        "id": 2,
+        "title": "02. 스태프 업무 수칙",
+        "content": "SKY AURORA 스태프 업무 수행 시 아래 수칙을 준수해야 합니다.\n\n- 모든 변경 사항은 관리자 승인 후 반영되어야 합니다.\n- 시스템 장애 및 이상 접근 감지 시 즉시 보고를 진행합니다.\n- 공지사항을 정기적으로 확인하고 업데이트 내역을 숙지하세요."
+    }
+]
 
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS manuals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            content TEXT NOT NULL
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            discord_id TEXT,
-            username TEXT,
-            ip_address TEXT,
-            device_info TEXT,
-            access_time TEXT
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS admins (
-            discord_id TEXT PRIMARY KEY,
-            memo TEXT,
-            created_at TEXT
-        )
-    ''')
-    
-    c.execute("SELECT COUNT(*) FROM manuals")
-    if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO manuals (title, content) VALUES (?, ?)", 
-                  ("01. 기본 보안 지침", "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템의 화면을 캡처하거나 촬영하는 행위를 금지합니다.\n2. 인증 계정 및 코드는 타인에게 공유할 수 없습니다.\n3. 시스템 이용 시 접속 IP 및 접근 위치가 실시간 기록됩니다."))
-        c.execute("INSERT INTO manuals (title, content) VALUES (?, ?)", 
-                  ("02. 스태프 업무 수칙", "SKY AURORA 스태프 업무 수행 시 아래 수칙을 준수해야 합니다.\n\n- 모든 변경 사항은 관리자 승인 후 반영되어야 합니다.\n- 시스템 장애 및 이상 접근 감지 시 즉시 보고를 진행합니다.\n- 공지사항을 정기적으로 확인하고 업데이트 내역을 숙지하세요."))
-        conn.commit()
-    conn.close()
-
-init_db()
-
-def is_admin_id(discord_id):
-    discord_id = str(discord_id)
-    if discord_id == OWNER_DISCORD_ID:
-        return True
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT discord_id FROM admins WHERE discord_id=?", (discord_id,))
-    row = c.fetchone()
-    conn.close()
-    return row is not None
-
-def log_access(discord_id, username):
-    user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if user_ip and ',' in user_ip:
-        user_ip = user_ip.split(',')[0].strip()
+def get_location_from_ip(ip_address):
+    if ip_address in ['127.0.0.1', 'localhost', '::1']:
+        return "로컬 접속 (관리자/테스트)"
         
-    device_info = request.headers.get('User-Agent', 'Unknown Device')
-    now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        url = f"http://ip-api.com/json/{ip_address}"
+        res = requests.get(url, timeout=1).json()
+        if res.get('status') == 'success':
+            country = res.get('country', 'Unknown')
+            city = res.get('city', 'Unknown')
+            isp = res.get('isp', 'Unknown')
+            return f"{country}, {city} ({isp})"
+    except Exception:
+        pass
+    return "위치 정보 확인 불가"
 
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO logs (discord_id, username, ip_address, device_info, access_time)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (discord_id, username, user_ip, device_info, now_time))
-    conn.commit()
-    conn.close()
-
-def get_manuals():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT id, title, content FROM manuals ORDER BY id ASC")
-    rows = c.fetchall()
-    conn.close()
-    return [{"id": r[0], "title": r[1], "content": r[2]} for r in rows]
-
-def verify_admin_token(request_obj):
-    auth_header = request_obj.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return False, None
-    
-    token = auth_header.split(" ")[1]
-    res = requests.get('https://discord.com/api/v10/users/@me', headers={'Authorization': f'Bearer {token}'})
-    if res.status_code != 200:
-        return False, None
-    
-    user_info = res.json()
-    discord_id = str(user_info.get('id'))
-    if is_admin_id(discord_id):
-        return True, user_info
-    return False, None
-
-# --- 웹 페이지 UI HTML ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -130,14 +70,17 @@ HTML_TEMPLATE = """
         @font-face {
             font-family: 'GmarketSansBold';
             src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/GmarketSansBold.woff') format('woff');
-            font-weight: normal; font-style: normal;
+            font-weight: normal;
+            font-style: normal;
         }
-        
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
             -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
             user-select: none !important;
             -webkit-touch-callout: none !important;
         }
@@ -152,9 +95,35 @@ HTML_TEMPLATE = """
             justify-content: center;
             align-items: center;
         }
-        
-        #bg-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; }
-        
+
+        /* 🔒 강력한 보안 차단 오버레이 (캡처 시도 및 창 이탈 시 작동) */
+        #security-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #060913;
+            z-index: 999999;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #ff2d55;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: -1px;
+        }
+
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+
         .container {
             position: relative;
             z-index: 2;
@@ -169,147 +138,348 @@ HTML_TEMPLATE = """
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            transition: all 0.5s ease;
-        }
-        
-        .container.theme-blue { border-color: rgba(0, 242, 254, 0.5); box-shadow: 0 0 50px rgba(0, 242, 254, 0.25); }
-        .container.theme-ruby { border-color: rgba(255, 45, 85, 0.5); box-shadow: 0 0 50px rgba(255, 45, 85, 0.25); }
-        
-        header { padding: 22px 30px; background: rgba(8, 14, 28, 0.85); border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; }
-        header h1 { font-size: 22px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #4facfe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        
-        .user-info { display: flex; align-items: center; gap: 12px; }
-        .logout-btn { color: #8a99ad; text-decoration: none; font-size: 13px; padding: 6px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; transition: 0.3s; }
-        .logout-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
-        
-        .login-box { padding: 40px 30px; text-align: center; margin: auto; max-width: 400px; width: 100%; }
-        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 8px; font-family: 'Pretendard'; font-weight: bold; font-size: 15px; }
-        
-        .dashboard { display: flex; flex: 1; overflow: hidden; }
-        .sidebar { width: 310px; background: rgba(0, 0, 0, 0.25); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 24px 14px; overflow-y: auto; }
-        
-        /* 💡 요청하신 이미지 참고한 네온 포인트 상단 바 테두리 버튼 스타일 */
-        .item-btn {
-            position: relative;
-            width: 100%;
-            text-align: left;
-            padding: 16px 18px;
-            background: rgba(12, 18, 36, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            color: #8a99ad;
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 15px;
-            margin-bottom: 12px;
-            overflow: hidden;
-            transition: all 0.3s ease;
         }
 
-        /* 버튼 상단 네온 포인트 라인 (기본 숨김) */
-        .item-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 0%;
-            height: 3px;
-            transition: width 0.3s ease;
-        }
-
-        /* 🔵 푸른색 테마 버튼 선택 */
-        .item-btn.active-blue {
-            color: #00ffaa;
-            border-color: rgba(0, 255, 170, 0.5);
-            box-shadow: 0 0 15px rgba(0, 255, 170, 0.25);
-            font-weight: bold;
-        }
-        .item-btn.active-blue::before {
-            width: 70%;
-            background: linear-gradient(90deg, #00f2fe, #00ffaa);
-            box-shadow: 0 0 10px #00ffaa;
-        }
-
-        /* 🔴 루비색 테마 버튼 선택 */
-        .item-btn.active-ruby {
-            color: #ff4d6d;
-            border-color: rgba(255, 45, 85, 0.5);
-            box-shadow: 0 0 15px rgba(255, 45, 85, 0.3);
-            font-weight: bold;
-        }
-        .item-btn.active-ruby::before {
-            width: 70%;
-            background: linear-gradient(90deg, #ff2d55, #ff4d6d);
-            box-shadow: 0 0 10px #ff2d55;
-        }
-
-        .main-content { flex: 1; padding: 35px; overflow-y: auto; display: flex; flex-direction: column; }
-        .doc-title { font-size: 24px; margin-bottom: 22px; color: #ffffff; border-bottom: 1px solid rgba(255, 255, 255, 0.12); padding-bottom: 14px; transition: opacity 0.3s ease, transform 0.3s ease; }
-        .doc-body { font-family: 'Pretendard'; font-size: 16px; line-height: 1.85; color: #e2e8f0; white-space: pre-wrap; flex: 1; transition: opacity 0.3s ease, transform 0.3s ease; }
-        
-        .fade-out { opacity: 0; transform: translateY(8px); }
-        .fade-in { opacity: 1; transform: translateY(0); }
-
-        /* 🔒 강력한 캡처 방지 보안 오버레이 (최근 앱 보기 및 이탈 시 작동) */
-        #security-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #060913;
-            z-index: 999999;
-            display: none;
-            justify-content: center;
+        header {
+            padding: 22px 30px;
+            background: rgba(8, 14, 28, 0.85);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            color: #ff2d55;
+        }
+        header h1 {
             font-size: 22px;
             font-weight: bold;
-            letter-spacing: -1px;
+            letter-spacing: 1px;
+            background: linear-gradient(90deg, #00f2fe, #4facfe, #00ffaa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        header .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        header .logout-btn {
+            font-family: 'Pretendard', sans-serif;
+            color: #8a99ad;
+            text-decoration: none;
+            font-size: 13px;
+            padding: 6px 14px;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            transition: 0.3s;
+        }
+        header .logout-btn:hover {
+            color: #fff;
+            border-color: #00ffaa;
         }
 
-        /* 본문 캡처 방지를 위한 보안 워터마크/캔버스 레이어 */
-        #content-shield {
-            position: relative;
-            flex: 1;
+        .login-box {
+            padding: 40px 30px;
+            text-align: center;
+            margin: auto;
+            max-width: 400px;
+            width: 100%;
+        }
+        .login-box input[type="password"] {
+            font-family: 'Pretendard', sans-serif;
+            width: 100%;
+            padding: 12px 16px;
+            margin-top: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+            text-align: center;
+        }
+        .login-box input[type="password"]:focus {
+            border-color: #00ffaa;
+            box-shadow: 0 0 10px rgba(0, 255, 170, 0.3);
+        }
+
+        .discord-btn {
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 12px;
+            background: #5865F2;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-family: 'Pretendard', sans-serif;
+            font-weight: bold;
+            font-size: 15px;
+            transition: background 0.2s, transform 0.2s;
+            margin-bottom: 20px;
+        }
+        .discord-btn:hover {
+            background: #4752C4;
+            transform: translateY(-2px);
+        }
+
+        .divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: #5865f2;
+            margin: 15px 0;
+            font-size: 12px;
+            font-family: 'Pretendard', sans-serif;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .divider:not(:empty)::before { margin-right: .5em; }
+        .divider:not(:empty)::after { margin-left: .5em; }
+
+        .dashboard {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 310px;
+            background: rgba(0, 0, 0, 0.25);
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 24px 14px;
             overflow-y: auto;
         }
+        .sidebar h2 {
+            font-size: 13px;
+            color: #7f8c8d;
+            letter-spacing: 1px;
+            margin-bottom: 18px;
+            padding-left: 8px;
+        }
+
+        .aurora-btn-wrapper {
+            position: relative;
+            margin-bottom: 12px;
+            border-radius: 12px;
+            overflow: hidden;
+            padding: 2px;
+            background: rgba(255, 255, 255, 0.05);
+            transition: transform 0.2s ease, box-shadow 0.3s ease;
+        }
+
+        .aurora-btn-wrapper::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(
+                from 0deg,
+                transparent 0%,
+                #ff007f 25%,
+                #7928ca 50%,
+                #ff0080 75%,
+                transparent 100%
+            );
+            animation: rotateAurora 3.5s linear infinite;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .aurora-btn-wrapper:hover::before { opacity: 1; }
+        .aurora-btn-wrapper:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 18px rgba(255, 0, 128, 0.35);
+        }
+
+        .aurora-btn-wrapper.active::before {
+            opacity: 1;
+            background: conic-gradient(
+                from 0deg,
+                transparent 0%,
+                #00ffaa 25%,
+                #00d2ff 50%,
+                #0051ff 75%,
+                #00ffaa 100%
+            ) !important;
+            animation: rotateAurora 2.5s linear infinite !important;
+        }
+        .aurora-btn-wrapper.active {
+            box-shadow: 0 0 22px rgba(0, 255, 170, 0.45);
+        }
+
+        .item-btn {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            text-align: left;
+            padding: 14px 18px;
+            background: rgba(12, 18, 36, 0.95);
+            border: none;
+            color: #8a99ad;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: color 0.2s, background 0.2s;
+            display: block;
+        }
+
+        .aurora-btn-wrapper:hover .item-btn { color: #ff77c6; }
+        .aurora-btn-wrapper.active .item-btn {
+            color: #00ffaa;
+            font-weight: bold;
+            background: rgba(8, 28, 42, 0.95);
+        }
+
+        @keyframes rotateAurora {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 35px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .doc-title {
+            font-size: 24px;
+            margin-bottom: 22px;
+            color: #ffffff;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+            padding-bottom: 14px;
+            letter-spacing: 0.5px;
+        }
+        .doc-body {
+            font-family: 'Pretendard', sans-serif;
+            font-weight: 500;
+            font-size: 16px;
+            line-height: 1.85;
+            color: #e2e8f0;
+            white-space: pre-wrap;
+            flex: 1;
+        }
     </style>
+    <script>
+        // 🔒 강력한 보안 제어 (캡처 단축키 및 우클릭 원천 차단)
+        document.addEventListener('contextmenu', e => e.preventDefault());
+        document.addEventListener('selectstart', e => e.preventDefault());
+        document.addEventListener('dragstart', e => e.preventDefault());
+
+        document.addEventListener('keydown', function(e) {
+            if (
+                e.key === 'PrintScreen' ||
+                e.keyCode === 44 ||
+                e.key === 'Meta' ||
+                e.key === 'OS' ||
+                (e.shiftKey && e.key === 'S') ||
+                e.key === 'F12' ||
+                (e.ctrlKey && ['c', 'u', 's', 'a', 'p', 'i', 'j'].includes(e.key.toLowerCase()))
+            ) {
+                e.preventDefault();
+                showSecurityOverlay();
+                alert('🔒 보안 정책에 의해 화면 캡처, 복사 및 개발자 도구 사용이 금지되어 있습니다.');
+            }
+        });
+
+        function showSecurityOverlay() {
+            document.getElementById('security-overlay').style.display = 'flex';
+        }
+        function hideSecurityOverlay() {
+            document.getElementById('security-overlay').style.display = 'none';
+        }
+
+        // 창 이탈(화면 전환, 다른 앱 실행, 캡처 도구 호출 등) 감지 시 즉시 블랙아웃 차단
+        window.addEventListener('blur', showSecurityOverlay);
+        window.addEventListener('focus', hideSecurityOverlay);
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                showSecurityOverlay();
+            } else {
+                hideSecurityOverlay();
+            }
+        });
+
+        function selectManual(btnElement) {
+            document.querySelectorAll('.aurora-btn-wrapper').forEach(w => w.classList.remove('active'));
+            const wrapper = btnElement.closest('.aurora-btn-wrapper');
+            if (wrapper) wrapper.classList.add('active');
+            
+            const title = btnElement.getAttribute('data-title');
+            const content = btnElement.getAttribute('data-content');
+            
+            document.getElementById('doc-title').innerText = title;
+            document.getElementById('doc-body').innerText = content;
+        }
+    </script>
 </head>
 <body>
-    <div id="security-overlay">🔒 보안 정책으로 인해 화면이 보호됩니다.</div>
+    <div id="security-overlay">
+        <span>🔒 보안 정책으로 인해 화면이 보호됩니다.</span>
+        <span style="font-size: 14px; color: #8a99ad; margin-top: 10px; font-family: 'Pretendard';">화면 캡처 또는 외부 유출 시도가 기록됩니다.</span>
+    </div>
+
     <canvas id="bg-canvas"></canvas>
-    
-    <div class="container theme-blue" id="main-container">
+
+    <div class="container">
         <header>
             <h1>SKY AURORA STAFF 매뉴얼</h1>
             {% if authenticated %}
                 <div class="user-info">
-                    <span style="font-size: 13px; color: #00ffaa;">👤 {{ username }}</span>
+                    <span style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard';">
+                        👤 {{ username }} (ID: {{ session.get('discord_id', 'N/A') }})
+                    </span>
                     <a href="/logout" class="logout-btn">로그아웃</a>
                 </div>
             {% endif %}
         </header>
+
         {% if not authenticated %}
             <div class="login-box">
-                <h2 style="font-size: 19px; color: #e2e8f0; margin-bottom: 20px;">🔒 스태프 디스코드 인증</h2>
-                <a href="/login/discord" class="discord-btn">Discord 계정으로 로그인</a>
+                <h2 style="font-size: 19px; color: #e2e8f0; margin-bottom: 20px;">🔒 스태프 인증</h2>
+                
+                <a href="/login/discord" class="discord-btn">
+                    <svg width="20" height="15" viewBox="0 0 127.14 96.36" fill="currentColor">
+                        <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1,105.25,105.25,0,0,0,32.19-16.14c2.64-27.38-4.51-51.11-18.91-72.15ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.87,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.1,53,91.08,65.69,84.69,65.69Z"/>
+                    </svg>
+                    Discord 계정으로 로그인
+                </a>
+
+                <div class="divider">OR</div>
+
+                {% if error %}
+                    <div class="alert-error" style="color:#ff5555; margin-top:10px; font-family: 'Pretendard';">{{ error }}</div>
+                {% endif %}
+
+                <form method="POST" action="/login">
+                    <input type="password" name="auth_code" placeholder="인증코드 입력" required autocomplete="off">
+                    <div class="aurora-btn-wrapper active" style="margin-top: 18px;">
+                        <button type="submit" class="item-btn" style="text-align: center; font-family: 'GmarketSansBold'; font-size: 16px;">인증코드로 로그인</button>
+                    </div>
+                </form>
             </div>
         {% else %}
             <div class="dashboard">
                 <div class="sidebar">
-                    <h2 style="font-size: 13px; color: #7f8c8d; margin-bottom: 18px;">MANUAL LIST</h2>
+                    <h2>MANUAL LIST</h2>
                     {% for item in manuals %}
-                        {% if loop.index % 2 == 1 %}
-                            <button class="item-btn active-blue" onclick="selectManual(this, 'blue', '{{ item.title }}', `{{ item.content }}`)">{{ item.title }}</button>
-                        {% else %}
-                            <button class="item-btn" onclick="selectManual(this, 'ruby', '{{ item.title }}', `{{ item.content }}`)">{{ item.title }}</button>
-                        {% endif %}
+                        <div class="aurora-btn-wrapper {% if loop.first %}active{% endif %}">
+                            <button id="btn-{{ item.id }}" 
+                                    class="item-btn" 
+                                    data-title="{{ item.title }}"
+                                    data-content="{{ item.content }}"
+                                    onclick="selectManual(this)">
+                                {{ item.title }}
+                            </button>
+                        </div>
                     {% endfor %}
                 </div>
-                <div class="main-content" id="content-shield">
+                <div class="main-content">
                     <div id="doc-title" class="doc-title">{{ manuals[0].title if manuals else '매뉴얼이 없습니다.' }}</div>
                     <div id="doc-body" class="doc-body">{{ manuals[0].content if manuals else '' }}</div>
                 </div>
@@ -318,157 +488,87 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // --- 🌌 울렁이는 푸른색 & 루비 오로라 배경 애니메이션 ---
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
-        
-        let width, height;
-        let mouseX = -1000, mouseY = -1000;
-        let targetMouseX = -1000, targetMouseY = -1000;
-        
+
         function resize() {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
         }
         window.addEventListener('resize', resize);
         resize();
 
-        window.addEventListener('mousemove', (e) => {
-            targetMouseX = e.clientX;
-            targetMouseY = e.clientY;
-        });
+        const stars = Array.from({ length: 140 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 1.8,
+            alpha: Math.random(),
+            speed: Math.random() * 0.01 + 0.005
+        }));
 
-        const stars = [];
-        for (let i = 0; i < 140; i++) {
-            stars.push({
-                x: Math.random() * window.innerWidth,
-                y: Math.random() * window.innerHeight,
-                size: Math.random() * 1.8 + 0.5,
-                alpha: Math.random(),
-                speed: Math.random() * 0.012 + 0.004
-            });
-        }
+        let tick = 0;
 
-        let time = 0;
-
-        function drawBackground() {
-            ctx.clearRect(0, 0, width, height);
-            time += 0.01;
+        function drawRibbonAurora(yOffset, waveHeight, color1, color2, speedMult) {
+            ctx.save();
+            ctx.beginPath();
             
-            for (let star of stars) {
-                star.alpha += star.speed;
-                if (star.alpha > 1 || star.alpha < 0) star.speed = -star.speed;
-                ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(star.alpha)})`;
-                ctx.beginPath();
-                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
-                ctx.fill();
+            const startY = yOffset + Math.sin(tick * speedMult) * 20;
+            ctx.moveTo(0, startY);
+
+            for (let x = 0; x <= canvas.width; x += 30) {
+                const y = yOffset + 
+                          Math.sin(x * 0.002 + tick * speedMult) * waveHeight + 
+                          Math.cos(x * 0.001 + tick * 0.5) * (waveHeight * 0.5);
+                ctx.lineTo(x, y);
             }
 
-            // 울렁이는 푸른색 오로라
-            const blueA = ctx.createRadialGradient(
-                width * 0.3 + Math.sin(time) * 150, 
-                height * 0.3 + Math.cos(time * 0.7) * 100, 
-                60, width * 0.3, height * 0.3, width * 0.6
-            );
-            blueA.addColorStop(0, 'rgba(0, 242, 254, 0.28)');
-            blueA.addColorStop(0.5, 'rgba(0, 150, 255, 0.12)');
-            blueA.addColorStop(1, 'rgba(6, 9, 19, 0)');
-            ctx.fillStyle = blueA;
-            ctx.fillRect(0, 0, width, height);
+            ctx.lineTo(canvas.width, startY + 180);
+            ctx.lineTo(0, startY + 180);
+            ctx.closePath();
 
-            // 울렁이는 루비 붉은색 오로라 (배경 양쪽 공존)
-            const rubyA = ctx.createRadialGradient(
-                width * 0.7 + Math.cos(time * 0.8) * 160, 
-                height * 0.7 + Math.sin(time * 0.9) * 110, 
-                80, width * 0.7, height * 0.7, width * 0.65
-            );
-            rubyA.addColorStop(0, 'rgba(255, 45, 85, 0.25)');
-            rubyA.addColorStop(0.5, 'rgba(225, 29, 72, 0.1)');
-            rubyA.addColorStop(1, 'rgba(6, 9, 19, 0)');
-            ctx.fillStyle = rubyA;
-            ctx.fillRect(0, 0, width, height);
+            const grad = ctx.createLinearGradient(0, yOffset - 50, canvas.width, yOffset + 200);
+            grad.addColorStop(0, color1);
+            grad.addColorStop(1, color2);
 
-            // 마우스 커서 루비 붉은색 오로라 추적
-            mouseX += (targetMouseX - mouseX) * 0.08;
-            mouseY += (targetMouseY - mouseY) * 0.08;
-
-            if (mouseX > 0 && mouseY > 0) {
-                const rubyCursor = ctx.createRadialGradient(mouseX, mouseY, 10, mouseX, mouseY, 300);
-                rubyCursor.addColorStop(0, 'rgba(255, 45, 85, 0.4)');
-                rubyCursor.addColorStop(0.5, 'rgba(225, 29, 72, 0.18)');
-                rubyCursor.addColorStop(1, 'rgba(6, 9, 19, 0)');
-                ctx.fillStyle = rubyCursor;
-                ctx.fillRect(0, 0, width, height);
-            }
-
-            requestAnimationFrame(drawBackground);
+            ctx.fillStyle = grad;
+            ctx.filter = 'blur(20px)';
+            ctx.fill();
+            ctx.restore();
         }
-        drawBackground();
 
-        // --- 📑 매뉴얼 클릭 시 색상 및 전환 애니메이션 ---
-        function selectManual(btn, themeColor, title, content) {
-            document.querySelectorAll('.item-btn').forEach(b => {
-                b.classList.remove('active-blue', 'active-ruby');
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            stars.forEach(s => {
+                s.alpha += s.speed;
+                if (s.alpha > 1 || s.alpha < 0) s.speed = -s.speed;
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(s.alpha)})`;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
             });
 
-            const mainContainer = document.getElementById('main-container');
+            tick += 0.012;
 
-            if (themeColor === 'ruby') {
-                btn.classList.add('active-ruby');
-                mainContainer.className = 'container theme-ruby';
-            } else {
-                btn.classList.add('active-blue');
-                mainContainer.className = 'container theme-blue';
-            }
+            drawRibbonAurora(
+                canvas.height * 0.08, 
+                60, 
+                'rgba(0, 255, 170, 0.35)', 
+                'rgba(0, 150, 255, 0.05)', 
+                0.8
+            );
 
-            const titleElem = document.getElementById('doc-title');
-            const bodyElem = document.getElementById('doc-body');
+            drawRibbonAurora(
+                canvas.height * 0.12, 
+                80, 
+                'rgba(0, 180, 255, 0.25)', 
+                'rgba(140, 0, 255, 0.02)', 
+                1.2
+            );
 
-            titleElem.classList.add('fade-out');
-            bodyElem.classList.add('fade-out');
-
-            setTimeout(() => {
-                titleElem.innerText = title;
-                bodyElem.innerText = content;
-
-                titleElem.classList.remove('fade-out');
-                bodyElem.classList.remove('fade-out');
-                titleElem.classList.add('fade-in');
-                bodyElem.classList.add('fade-in');
-            }, 200);
+            requestAnimationFrame(animate);
         }
-
-        // ==========================================
-        // 🔒 강력한 캡처 방지 및 최근 앱 숨김(꼼수 차단)
-        // ==========================================
-        const overlay = document.getElementById('security-overlay');
-
-        document.addEventListener('contextmenu', e => e.preventDefault());
-        document.addEventListener('selectstart', e => e.preventDefault());
-        document.addEventListener('dragstart', e => e.preventDefault());
-
-        document.addEventListener('keydown', (e) => {
-            if (
-                e.key === 'PrintScreen' ||
-                e.keyCode === 44 ||
-                e.keyCode === 123 ||
-                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
-                (e.ctrlKey && (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P' || e.key === 'u' || e.key === 'U'))
-            ) {
-                e.preventDefault();
-                alert('🔒 보안 정책에 의해 캡처 및 단축키가 금지되어 있습니다.');
-            }
-        });
-
-        function hideScreen() { overlay.style.display = 'flex'; }
-        function showScreen() { overlay.style.display = 'none'; }
-
-        window.addEventListener('blur', hideScreen);
-        window.addEventListener('focus', showScreen);
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) hideScreen();
-            else showScreen();
-        });
+        animate();
     </script>
 </body>
 </html>
@@ -476,7 +576,14 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE, authenticated=session.get('authenticated', False), username=session.get('username', '스태프'), manuals=get_manuals())
+    is_auth = session.get('authenticated', False)
+    username = session.get('username', '스태프')
+    return render_template_string(
+        HTML_TEMPLATE, 
+        authenticated=is_auth, 
+        username=username,
+        manuals=MANUALS
+    )
 
 @app.route('/login/discord')
 def login_discord():
@@ -485,94 +592,112 @@ def login_discord():
 @app.route('/callback')
 def callback():
     code = request.args.get('code')
-    if not code: return redirect(url_for('index'))
-    data = {'client_id': DISCORD_CLIENT_ID, 'client_secret': DISCORD_CLIENT_SECRET, 'grant_type': 'authorization_code', 'code': code, 'redirect_uri': DISCORD_REDIRECT_URI}
-    token_res = requests.post('https://discord.com/api/v10/oauth2/token', data=data, headers={'Content-Type': 'application/x-www-form-urlencoded'}).json()
-    access_token = token_res.get('access_token')
-    if not access_token: return redirect(url_for('index'))
+    if not code:
+        return render_template_string(
+            HTML_TEMPLATE, 
+            authenticated=False, 
+            error="❌ 디스코드 인증에 실패했습니다.",
+            manuals=MANUALS
+        )
+
+    data = {
+        'client_id': DISCORD_CLIENT_ID,
+        'client_secret': DISCORD_CLIENT_SECRET,
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': DISCORD_REDIRECT_URI
+    }
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
     
-    user_data = requests.get('https://discord.com/api/v10/users/@me', headers={'Authorization': f'Bearer {access_token}'}).json()
-    
-    log_access(user_data.get('id'), user_data.get('username'))
+    token_res = requests.post('https://discord.com/api/v10/oauth2/token', data=data, headers=headers)
+    token_json = token_res.json()
+
+    access_token = token_json.get('access_token')
+    if not access_token:
+        return render_template_string(
+            HTML_TEMPLATE, 
+            authenticated=False, 
+            error="❌ 토큰 발급에 실패했습니다.",
+            manuals=MANUALS
+        )
+
+    user_headers = {'Authorization': f'Bearer {access_token}'}
+    user_res = requests.get('https://discord.com/api/v10/users/@me', headers=user_headers)
+    user_data = user_res.json()
+
+    discord_id = str(user_data.get('id', 'Unknown'))
+    username = user_data.get('global_name') or user_data.get('username', 'Unknown')
+
+    user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if user_ip and ',' in user_ip:
+        user_ip = user_ip.split(',')[0].strip()
+
+    location_info = get_location_from_ip(user_ip)
+    now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # 상세 로그 기록 (디스코드 ID 포함)
+    ACCESS_LOGS.insert(0, {
+        "discord_id": discord_id,
+        "user": username,
+        "ip": user_ip,
+        "location": location_info,
+        "time": now_time,
+        "type": "Discord OAuth"
+    })
+
     session['authenticated'] = True
-    session['username'] = user_data.get('global_name') or user_data.get('username')
+    session['discord_id'] = discord_id
+    session['username'] = username
+    
     return redirect(url_for('index'))
+
+@app.route('/login', methods=['POST'])
+def login():
+    entered_code = request.form.get('auth_code')
+    
+    user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if user_ip and ',' in user_ip:
+        user_ip = user_ip.split(',')[0].strip()
+        
+    location_info = get_location_from_ip(user_ip)
+    now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    ACCESS_LOGS.insert(0, {
+        "discord_id": "CODE_AUTH",
+        "user": "인증코드 접속",
+        "ip": user_ip,
+        "location": location_info,
+        "time": now_time,
+        "type": "Auth Code"
+    })
+
+    if entered_code == VALID_AUTH_CODE:
+        session['authenticated'] = True
+        session['discord_id'] = "SYSTEM"
+        session['username'] = "스태프(코드인증)"
+        return redirect(url_for('index'))
+    else:
+        return render_template_string(
+            HTML_TEMPLATE, 
+            authenticated=False, 
+            error="❌ 인증코드가 올바르지 않습니다.",
+            manuals=MANUALS
+        )
+
+# 📊 관리자 전용 접속 로그 확인 API (접속한 디스코드 ID 및 IP 확인 가능)
+@app.route('/admin/logs')
+def admin_logs():
+    discord_id = session.get('discord_id')
+    if discord_id != OWNER_DISCORD_ID and discord_id != "SYSTEM":
+        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify(ACCESS_LOGS)
 
 @app.route('/logout')
 def logout():
-    session.clear()
+    session.pop('authenticated', None, )
+    session.pop('discord_id', None)
+    session.pop('username', None)
     return redirect(url_for('index'))
 
-# ==========================================
-# 🛠️ 관리자 API
-# ==========================================
-@app.route('/api/admin/logs', methods=['GET'])
-def api_get_logs():
-    is_admin, _ = verify_admin_token(request)
-    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT id, discord_id, username, ip_address, device_info, access_time FROM logs ORDER BY id DESC LIMIT 100")
-    logs = [{"id": r[0], "discord_id": r[1], "username": r[2], "ip_address": r[3], "device_info": r[4], "access_time": r[5]} for r in c.fetchall()]
-    conn.close()
-    return jsonify(logs)
-
-@app.route('/api/admin/manuals', methods=['POST'])
-def api_update_manuals():
-    is_admin, _ = verify_admin_token(request)
-    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
-    data = request.json
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("DELETE FROM manuals")
-    for item in data:
-        c.execute("INSERT INTO manuals (title, content) VALUES (?, ?)", (item['title'], item['content']))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "success"})
-
-@app.route('/api/admin/users', methods=['GET'])
-def api_get_admins():
-    is_admin, _ = verify_admin_token(request)
-    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT discord_id, memo, created_at FROM admins ORDER BY created_at DESC")
-    admins = [{"discord_id": r[0], "memo": r[1], "created_at": r[2]} for r in c.fetchall()]
-    conn.close()
-    return jsonify(admins)
-
-@app.route('/api/admin/users/add', methods=['POST'])
-def api_add_admin():
-    is_admin, _ = verify_admin_token(request)
-    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
-    data = request.json
-    discord_id = str(data.get('discord_id', '')).strip()
-    memo = data.get('memo', '')
-    now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    if not discord_id: return jsonify({"error": "디스코드 ID가 필요합니다."}), 400
-
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO admins (discord_id, memo, created_at) VALUES (?, ?, ?)", (discord_id, memo, now_time))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "success"})
-
-@app.route('/api/admin/users/delete', methods=['POST'])
-def api_delete_admin():
-    is_admin, _ = verify_admin_token(request)
-    if not is_admin: return jsonify({"error": "Unauthorized"}), 403
-    data = request.json
-    discord_id = str(data.get('discord_id', '')).strip()
-
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("DELETE FROM admins WHERE discord_id=?", (discord_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "success"})
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
