@@ -122,7 +122,7 @@ def verify_admin_token(request_obj):
         return True, user_info
     return False, None
 
-# --- 웹 페이지 UI HTML ---
+# --- 웹 페이지 UI HTML (애니메이션, 커서 효과, 오로라 배경 포함) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -139,23 +139,35 @@ HTML_TEMPLATE = """
         }
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body { font-family: 'GmarketSansBold', 'Pretendard', sans-serif; background: #060913; color: #ffffff; overflow: hidden; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        #bg-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
-        .container { position: relative; z-index: 2; width: 90%; max-width: 1100px; height: 85vh; background: rgba(12, 18, 36, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(0, 255, 200, 0.3); border-radius: 20px; box-shadow: 0 0 50px rgba(0, 255, 170, 0.2); display: flex; flex-direction: column; overflow: hidden; }
+        
+        #bg-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; pointer-events: none; }
+        
+        .container { position: relative; z-index: 2; width: 90%; max-width: 1100px; height: 85vh; background: rgba(12, 18, 36, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(0, 255, 200, 0.3); border-radius: 20px; box-shadow: 0 0 50px rgba(0, 255, 170, 0.2); display: flex; flex-direction: column; overflow: hidden; transition: border-color 0.5s ease, box-shadow 0.5s ease; }
+        
         header { padding: 22px 30px; background: rgba(8, 14, 28, 0.85); border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; }
         header h1 { font-size: 22px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #4facfe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
         .user-info { display: flex; align-items: center; gap: 12px; }
-        .logout-btn { color: #8a99ad; text-decoration: none; font-size: 13px; padding: 6px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; transition: all 0.2s; }
+        .logout-btn { color: #8a99ad; text-decoration: none; font-size: 13px; padding: 6px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; transition: 0.3s; }
         .logout-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+        
         .login-box { padding: 40px 30px; text-align: center; margin: auto; max-width: 400px; width: 100%; }
-        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 8px; font-family: 'Pretendard'; font-weight: bold; font-size: 15px; transition: all 0.2s; }
-        .discord-btn:hover { background: #4752C4; transform: translateY(-2px); }
+        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 8px; font-family: 'Pretendard'; font-weight: bold; font-size: 15px; transition: transform 0.2s, background-color 0.2s; }
+        .discord-btn:hover { background-color: #4752C4; transform: translateY(-2px); }
+        
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         .sidebar { width: 310px; background: rgba(0, 0, 0, 0.25); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 24px 14px; overflow-y: auto; }
-        .item-btn { width: 100%; text-align: left; padding: 14px 18px; background: rgba(12, 18, 36, 0.6); border: 1px solid rgba(255, 255, 255, 0.05); color: #8a99ad; border-radius: 10px; cursor: pointer; font-size: 15px; margin-bottom: 8px; transition: all 0.2s; font-family: 'GmarketSansBold'; }
-        .item-btn:hover, .item-btn.active { background: linear-gradient(90deg, rgba(0, 242, 254, 0.15), rgba(0, 255, 170, 0.15)); border-color: rgba(0, 255, 200, 0.4); color: #ffffff; }
+        
+        .item-btn { width: 100%; text-align: left; padding: 14px 18px; background: rgba(12, 18, 36, 0.95); border: 1px solid rgba(255, 255, 255, 0.05); color: #8a99ad; border-radius: 10px; cursor: pointer; font-size: 15px; margin-bottom: 8px; transition: all 0.3s ease; }
+        .item-btn:hover { background: rgba(0, 242, 254, 0.15); color: #ffffff; border-color: rgba(0, 242, 254, 0.4); transform: translateX(4px); }
+        .item-btn.active { background: linear-gradient(90deg, rgba(0, 242, 254, 0.25), rgba(79, 172, 254, 0.25)); color: #00ffaa; border-color: #00ffaa; font-weight: bold; }
+        
         .main-content { flex: 1; padding: 35px; overflow-y: auto; display: flex; flex-direction: column; }
-        .doc-title { font-size: 24px; margin-bottom: 22px; color: #ffffff; border-bottom: 1px solid rgba(255, 255, 255, 0.12); padding-bottom: 14px; }
-        .doc-body { font-family: 'Pretendard'; font-size: 16px; line-height: 1.85; color: #e2e8f0; white-space: pre-wrap; flex: 1; }
+        .doc-title { font-size: 24px; margin-bottom: 22px; color: #ffffff; border-bottom: 1px solid rgba(255, 255, 255, 0.12); padding-bottom: 14px; transition: opacity 0.3s ease, transform 0.3s ease; }
+        .doc-body { font-family: 'Pretendard'; font-size: 16px; line-height: 1.85; color: #e2e8f0; white-space: pre-wrap; flex: 1; transition: opacity 0.3s ease, transform 0.3s ease; }
+        
+        .fade-out { opacity: 0; transform: translateY(8px); }
+        .fade-in { opacity: 1; transform: translateY(0); }
     </style>
 </head>
 <body>
@@ -192,54 +204,109 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // --- 1. 백그라운드 별빛/파티클 애니메이션 ---
+        // --- 🌌 오로라 Canvas & 별 애니메이션 ---
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
-        let stars = [];
+        
+        let width, height;
+        let mouseX = -1000, mouseY = -1000;
+        let targetMouseX = -1000, targetMouseY = -1000;
+        
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
 
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            initStars();
+        window.addEventListener('mousemove', (e) => {
+            targetMouseX = e.clientX;
+            targetMouseY = e.clientY;
+        });
+
+        // 별 입자들 생성
+        const stars = [];
+        for (let i = 0; i < 120; i++) {
+            stars.push({
+                x: Math.random() * window.innerWidth,
+                y: Math.random() * window.innerHeight,
+                size: Math.random() * 1.8 + 0.5,
+                alpha: Math.random(),
+                speed: Math.random() * 0.015 + 0.005
+            });
         }
 
-        function initStars() {
-            stars = [];
-            const count = Math.floor((canvas.width * canvas.height) / 3000);
-            for (let i = 0; i < count; i++) {
-                stars.push({
-                    x: Math.random() * canvas.width,
-                    y: Math.random() * canvas.height,
-                    radius: Math.random() * 1.5,
-                    alpha: Math.random(),
-                    speed: Math.random() * 0.01 + 0.005
-                });
-            }
-        }
+        let time = 0;
 
-        function animateStars() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            stars.forEach(star => {
+        function drawBackground() {
+            ctx.clearRect(0, 0, width, height);
+            
+            // 1. 깜빡이는 별 그리기
+            for (let star of stars) {
                 star.alpha += star.speed;
                 if (star.alpha > 1 || star.alpha < 0) star.speed = -star.speed;
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(star.alpha)})`;
                 ctx.beginPath();
-                ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(0, 255, 200, ${Math.abs(star.alpha)})`;
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
                 ctx.fill();
-            });
-            requestAnimationFrame(animateStars);
+            }
+
+            // 2. 푸른 오로라 배경 (기본/현재창 메인 오로라)
+            time += 0.008;
+            const blueAurora1 = ctx.createRadialGradient(width * 0.3 + Math.sin(time) * 100, height * 0.3 + Math.cos(time * 0.8) * 80, 50, width * 0.3, height * 0.3, width * 0.6);
+            blueAurora1.addColorStop(0, 'rgba(0, 242, 254, 0.22)');
+            blueAurora1.addColorStop(0.5, 'rgba(79, 172, 254, 0.12)');
+            blueAurora1.addColorStop(1, 'rgba(6, 9, 19, 0)');
+
+            ctx.fillStyle = blueAurora1;
+            ctx.fillRect(0, 0, width, height);
+
+            const blueAurora2 = ctx.createRadialGradient(width * 0.7 + Math.cos(time * 0.7) * 120, height * 0.7 + Math.sin(time * 0.9) * 90, 80, width * 0.7, height * 0.7, width * 0.7);
+            blueAurora2.addColorStop(0, 'rgba(0, 255, 170, 0.18)');
+            blueAurora2.addColorStop(0.5, 'rgba(0, 150, 255, 0.08)');
+            blueAurora2.addColorStop(1, 'rgba(6, 9, 19, 0)');
+
+            ctx.fillStyle = blueAurora2;
+            ctx.fillRect(0, 0, width, height);
+
+            // 3. 마우스 커서 추적: 붉은 루비 계열 오로라 
+            mouseX += (targetMouseX - mouseX) * 0.08;
+            mouseY += (targetMouseY - mouseY) * 0.08;
+
+            if (mouseX > 0 && mouseY > 0) {
+                const rubyCursorAurora = ctx.createRadialGradient(mouseX, mouseY, 10, mouseX, mouseY, 320);
+                rubyCursorAurora.addColorStop(0, 'rgba(255, 45, 85, 0.35)');   // 루비 붉은빛
+                rubyCursorAurora.addColorStop(0.4, 'rgba(225, 29, 72, 0.18)'); // 디프 루비
+                rubyCursorAurora.addColorStop(1, 'rgba(6, 9, 19, 0)');
+
+                ctx.fillStyle = rubyCursorAurora;
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            requestAnimationFrame(drawBackground);
         }
+        drawBackground();
 
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-        animateStars();
-
-        // --- 2. 매뉴얼 전환 스크립트 ---
+        // --- 📑 매뉴얼 클릭 및 전환 애니메이션 ---
         function selectManual(btn, title, content) {
             document.querySelectorAll('.item-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            document.getElementById('doc-title').innerText = title;
-            document.getElementById('doc-body').innerText = content;
+
+            const titleElem = document.getElementById('doc-title');
+            const bodyElem = document.getElementById('doc-body');
+
+            titleElem.classList.add('fade-out');
+            bodyElem.classList.add('fade-out');
+
+            setTimeout(() => {
+                titleElem.innerText = title;
+                bodyElem.innerText = content;
+
+                titleElem.classList.remove('fade-out');
+                bodyElem.classList.remove('fade-out');
+                titleElem.classList.add('fade-in');
+                bodyElem.classList.add('fade-in');
+            }, 200);
         }
     </script>
 </body>
