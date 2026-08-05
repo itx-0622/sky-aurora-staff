@@ -2,27 +2,34 @@ import os
 import json
 import base64
 import datetime
-import random
 from flask import Flask, request, render_template_string, redirect, session, jsonify
 import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
+
+# 프록시 및 헤더 설정 (Reverse Proxy 환경 대응)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
+
+# ==========================================
+# ⚙️ 쿠키 및 세션 보안 설정 (로그인 튕김 방지 핵심)
+# ==========================================
+app.secret_key = os.environ.get("SECRET_KEY", "sky_aurora_super_secret_key_2026")
+app.config['SESSION_COOKIE_NAME'] = 'sky_aurora_session'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS 환경 필수
+app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
 
 # ==========================================
 # ⚙️ 설정 및 환경 변수
 # ==========================================
 CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "1534184089144266872")
 CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "JcMp7ntF3Rx32ZYTRjyaYUWfmp0EU3co")
-BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "") # 사용자 조회를 위한 Bot Token (선택사항)
+BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
 
-ADMIN_SECRET_KEY = os.environ.get("ADMIN_SECRET_KEY", "sky_aurora_admin_secret_key_1234")
 DATA_FILE = "sky_aurora_admin_data.json"
 DEFAULT_ADMINS = ["1534184089144266872", "843621337066504225"]
 
-# GitHub 영구 저장 환경변수
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
 
@@ -190,7 +197,6 @@ MAIN_HTML_TEMPLATE = """
         .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
         .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5); }
 
-        .access-denied-card { background: rgba(255, 45, 85, 0.1); border: 1px solid #ff2d55; padding: 30px; border-radius: 16px; text-align: center; }
         .access-denied-title { font-size: 20px; color: #ff2d55; margin-bottom: 10px; font-family: 'GmarketSansBold'; }
 
         .dashboard { display: flex; flex: 1; overflow: hidden; }
@@ -444,12 +450,20 @@ MAIN_HTML_TEMPLATE = """
                     if (errData.reason === 'blacklisted') {
                         document.getElementById('denied-title').innerText = "⚠️ 접근 차단 (BLACK LIST)";
                         document.getElementById('denied-desc').innerText = "귀하의 계정은 차단되어 접근할 수 없습니다.";
+                    } else {
+                        document.getElementById('denied-title').innerText = "🔒 접근 승인 대기 중";
+                        document.getElementById('denied-desc').innerText = "화이트리스트에 등록되지 않은 계정입니다. 관리자에게 승인을 요청하세요.";
                     }
                     return;
                 }
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.status === 'unauthorized') return;
+                    if (data.status === 'unauthorized') {
+                        document.getElementById('login-box').style.display = 'block';
+                        document.getElementById('access-denied-box').style.display = 'none';
+                        document.getElementById('main-dashboard').style.display = 'none';
+                        return;
+                    }
 
                     appState = data;
                     document.getElementById('login-box').style.display = 'none';
@@ -774,7 +788,9 @@ def callback():
     if not code:
         return redirect('/')
 
-    redirect_uri = f"{request.scheme}://{request.host}/callback"
+    # HTTPS 프로토콜 강제 적용
+    host = request.host
+    redirect_uri = f"https://{host}/callback" if not host.startswith("localhost") and not host.startswith("127.0.0.1") else f"http://{host}/callback"
     
     token_req = requests.post("https://discord.com/api/oauth2/token", data={
         "client_id": CLIENT_ID,
@@ -796,30 +812,30 @@ def callback():
         return "Failed to fetch user", 400
 
     user_info = user_req.json()
+    
+    # 🌟 세션 쿠키 강제 저장
+    session.permanent = True
     session['user'] = user_info
 
     data = load_data()
     user_id = user_info['id']
     username = user_info.get('global_name') or user_info.get('username')
 
-    # 권한 엄격 판별
-    if user_id in data.get("user_blacklist", []):
-        add_log(data, "SECURITY", username, "블랙리스트 유저 차단됨")
-        save_data(data)
-        return redirect('/')
-
     is_admin = user_id in data.get("admin_whitelist", [])
     is_staff = user_id in data.get("user_whitelist", [])
+    is_black = user_id in data.get("user_blacklist", [])
 
-    if not (is_admin or is_staff):
-        add_log(data, "SECURITY", username, "미등록 사용자 접근 시도 거부")
-        save_data(data)
-        return redirect('/')
+    if is_black:
+        add_log(data, "SECURITY", username, "블랙리스트 유저 접근 차단됨")
+    elif not (is_admin or is_staff):
+        add_log(data, "SECURITY", username, "미등록 사용자 접근 거부 (화이트리스트 필요)")
+    else:
+        role_str = "ADMIN" if is_admin else "STAFF"
+        add_log(data, "AUTH", username, f"시스템 접속 완료 ({role_str})")
 
-    role_str = "ADMIN" if is_admin else "STAFF"
-    add_log(data, "AUTH", username, f"시스템 접속 완료 ({role_str})")
     save_data(data)
 
+    # 차단 여부와 관계없이 메인 화면으로 이동 (메인 프론트에서 /api/state 호출하여 적절한 UI 표시)
     return redirect('/')
 
 @app.route('/logout')
@@ -836,12 +852,14 @@ def get_state():
     data = load_data()
     user_id = user['id']
 
+    # 블랙리스트 체크
     if user_id in data.get("user_blacklist", []):
         return jsonify({"status": "forbidden", "reason": "blacklisted"}), 403
 
     is_admin = user_id in data.get("admin_whitelist", [])
     is_staff = user_id in data.get("user_whitelist", [])
 
+    # 화이트리스트 및 어드민 체크
     if not (is_admin or is_staff):
         return jsonify({"status": "forbidden", "reason": "not_whitelisted"}), 403
 
@@ -873,7 +891,6 @@ def lookup_user():
 
     query = request.args.get('query', '').replace('@', '').strip()
 
-    # Bot Token이 설정된 경우 디스코드 API로 조회 시도
     if BOT_TOKEN:
         headers = {"Authorization": f"Bot {BOT_TOKEN}"}
         res = requests.get(f"https://discord.com/api/v10/users/{query}", headers=headers)
@@ -887,7 +904,6 @@ def lookup_user():
                 "avatar_url": avatar
             })
 
-    # ID 자체로 조회 시 가상 데이터 프레임 반환
     return jsonify({
         "id": query,
         "username": query,
@@ -906,11 +922,10 @@ def set_permission():
 
     req = request.get_json()
     target_id = req.get('target_id')
-    action = req.get('action') # 'add', 'blacklist', 'remove'
-    role = req.get('role', 'staff') # 'staff', 'admin'
+    action = req.get('action')
+    role = req.get('role', 'staff')
     username = user.get('global_name') or user.get('username')
 
-    # 기존 리스트에서 원본 삭제 처리
     if target_id in data.get("user_whitelist", []): data["user_whitelist"].remove(target_id)
     if target_id in data.get("user_blacklist", []): data["user_blacklist"].remove(target_id)
     if target_id in data.get("admin_whitelist", []) and target_id not in DEFAULT_ADMINS:
@@ -996,9 +1011,6 @@ def delete_manual():
 
     return jsonify({"error": "Invalid index"}), 400
 
-# --------------------------------------------------
-# 🚀 서버 구동
-# --------------------------------------------------
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
