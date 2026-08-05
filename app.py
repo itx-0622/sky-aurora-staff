@@ -792,240 +792,100 @@ MAIN_HTML_TEMPLATE = """
 # 🌐 Web App API Routes & Auth Logic
 # ==========================================
 
-@app.route('/')
-def index():
-    return render_template_string(MAIN_HTML_TEMPLATE, CLIENT_ID=CLIENT_ID)
-
-@app.route('/callback')
-def callback():
-    code = request.args.get('code')
-    if not code:
-        return redirect('/')
-
-    redirect_uri = request.host_url.rstrip('/') + '/callback'
-    token_url = 'https://discord.com/api/oauth2/token'
-    data = {
-        'client_id': CLIENT_ID,
-        'client_secret': CLIENT_SECRET,
-        'grant_type': 'authorization_code',
-        'code': code,
-        'redirect_uri': redirect_uri
-    }
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-
-    res = requests.post(token_url, data=data, headers=headers)
-    if res.status_code != 200:
-        return redirect('/')
-
-    tokens = res.json()
-    access_token = tokens.get('access_token')
-
-    user_res = requests.get('https://discord.com/api/users/@me', headers={
-        'Authorization': f'Bearer {access_token}'
-    })
-
-    if user_res.status_code == 200:
-        session['user'] = user_res.json()
-        session.permanent = True
-        
-        # 접속 로그 남기기
-        db = load_data()
-        user_name = session['user'].get('global_name') or session['user'].get('username')
-        add_log(db, "AUTHENTICATION", user_name, f"로그인 완료 (ID: {session['user']['id']})")
-        save_data(db)
-
-    return redirect('/')
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect('/')
-
-@app.route('/api/state')
-def api_state():
-    user = session.get('user')
-    if not user:
-        return jsonify({'status': 'unauthorized'}), 200
-
-    db = load_data()
-    user_id = user['id']
-
-    if user_id in db.get('user_blacklist', []):
-        return jsonify({'status': 'error', 'reason': 'blacklisted'}), 403
-
-    is_admin = user_id in db.get('admin_whitelist', [])
-    is_staff = user_id in db.get('user_whitelist', [])
-
-    if not is_admin and not is_staff:
-        return jsonify({'status': 'error', 'reason': 'not_whitelisted'}), 403
-
-    role = 'admin' if is_admin else 'staff'
-
-    return jsonify({
-        'status': 'ok',
-        'user': user,
-        'role': role,
-        'manuals': db.get('manuals', []),
-        'user_whitelist': db.get('user_whitelist', []),
-        'user_blacklist': db.get('user_blacklist', []),
-        'admin_whitelist': db.get('admin_whitelist', []),
-        'logs': db.get('logs', []) if is_admin else []
-    })
-
-@app.route('/api/manual/save', methods=['POST'])
-def api_manual_save():
-    user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
-    
-    db = load_data()
-    if user['id'] not in db.get('admin_whitelist', []):
-        return jsonify({'error': 'Forbidden'}), 403
-
-    req_data = request.get_json() or {}
-    idx = req_data.get('index', -1)
-    category = req_data.get('category', '공통 매뉴얼')
-    pinned = bool(req_data.get('pinned', False))
-    title = req_data.get('title', '').strip()
-    content = req_data.get('content', '').strip()
-
-    if not title or not content:
-        return jsonify({'error': 'Bad Request'}), 400
-
-    manual_entry = {
-        'id': int(datetime.datetime.now().timestamp()),
-        'category': category,
-        'pinned': pinned,
-        'title': title,
-        'content': content
-    }
-
-    if 0 <= idx < len(db['manuals']):
-        db['manuals'][idx] = manual_entry
-        action_str = f"매뉴얼 수정 [{title}]"
-    else:
-        db['manuals'].append(manual_entry)
-        action_str = f"새 매뉴얼 등록 [{title}]"
-
-    user_name = user.get('global_name') or user.get('username')
-    add_log(db, "MANUAL_EDIT", user_name, action_str)
-    save_data(db)
-
-    return jsonify({'status': 'success'})
-
-@app.route('/api/manual/delete', methods=['POST'])
-def api_manual_delete():
-    user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
-
-    db = load_data()
-    if user['id'] not in db.get('admin_whitelist', []):
-        return jsonify({'error': 'Forbidden'}), 403
-
-    req_data = request.get_json() or {}
-    idx = req_data.get('index', -1)
-
-    if 0 <= idx < len(db['manuals']):
-        deleted_title = db['manuals'][idx].get('title', '')
-        del db['manuals'][idx]
-        user_name = user.get('global_name') or user.get('username')
-        add_log(db, "MANUAL_DELETE", user_name, f"매뉴얼 삭제 [{deleted_title}]")
-        save_data(db)
-        return jsonify({'status': 'success'})
-
-    return jsonify({'error': 'Invalid Index'}), 400
-
-@app.route('/api/user/search')
-def api_user_search():
-    user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
-
-    query = request.args.get('query', '').strip().lstrip('@')
-    if not query: return jsonify({'error': 'Empty query'}), 400
-
-    # 1. BOT_TOKEN을 활용한 디스코드 API 단일 조회 시도
-    if BOT_TOKEN:
-        headers = {'Authorization': f'Bot {BOT_TOKEN}'}
-        res = requests.get(f'https://discord.com/api/users/{query}', headers=headers)
-        if res.status_code == 200:
-            return jsonify(res.json())
-
-    # 2. BOT TOKEN 미설정 또는 ID 검색 불발 시 임시 스텁 응답 생성
-    return jsonify({
-        'id': query,
-        'username': f"user_{query[:6]}",
-        'global_name': f"User ({query[:6]})",
-        'avatar': None
-    })
-
 @app.route('/api/permission/apply', methods=['POST'])
 def api_permission_apply():
     user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
+    if not user: 
+        return jsonify({'error': 'Unauthorized'}), 401
 
     db = load_data()
-    if user['id'] not in db.get('admin_whitelist', []):
+    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
         return jsonify({'error': 'Forbidden'}), 403
 
     req_data = request.get_json() or {}
     target_id = str(req_data.get('target_id', '')).strip()
-    action = req_data.get('action')  # 'add' or 'blacklist'
-    role = req_data.get('role', 'staff')  # 'staff' or 'admin'
+    action = req_data.get('action')  # 'add' 또는 'blacklist'
+    role = req_data.get('role', 'staff')  # 'staff' 또는 'admin'
 
-    if not target_id: return jsonify({'error': 'Target ID required'}), 400
+    if not target_id: 
+        return jsonify({'error': 'Target ID required'}), 400
 
     user_name = user.get('global_name') or user.get('username')
 
+    # 리스트 데이터 타입 안전성 확보 (모두 문자열로 변환)
+    db['user_whitelist'] = [str(x) for x in db.get('user_whitelist', [])]
+    db['admin_whitelist'] = [str(x) for x in db.get('admin_whitelist', [])]
+    db['user_blacklist'] = [str(x) for x in db.get('user_blacklist', [])]
+
     if action == 'add':
-        if target_id in db.get('user_blacklist', []):
+        # 블랙리스트에 존재하면 제거
+        if target_id in db['user_blacklist']:
             db['user_blacklist'].remove(target_id)
         
+        # 화이트리스트 추가
+        if target_id not in db['user_whitelist']:
+            db['user_whitelist'].append(target_id)
+
+        # 어드민 권한 부여 시 admin_whitelist에도 추가
         if role == 'admin':
             if target_id not in db['admin_whitelist']:
                 db['admin_whitelist'].append(target_id)
-            if target_id not in db['user_whitelist']:
-                db['user_whitelist'].append(target_id)
             add_log(db, "PERMISSION", user_name, f"어드민 권한 부여 (ID: {target_id})")
         else:
-            if target_id not in db['user_whitelist']:
-                db['user_whitelist'].append(target_id)
+            # 스태프로 변경 시 어드민 명단에서 제거 (기본 어드민 제외)
+            if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
+                db['admin_whitelist'].remove(target_id)
             add_log(db, "PERMISSION", user_name, f"스태프 권한 부여 (ID: {target_id})")
 
     elif action == 'blacklist':
-        if target_id in db.get('user_whitelist', []):
+        # 화이트리스트 및 어드민 명단에서 제거
+        if target_id in db['user_whitelist']:
             db['user_whitelist'].remove(target_id)
-        if target_id in db.get('admin_whitelist', []) and target_id not in DEFAULT_ADMINS:
+        if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
             db['admin_whitelist'].remove(target_id)
-        if target_id not in db.get('user_blacklist', []):
+        
+        # 블랙리스트 추가
+        if target_id not in db['user_blacklist']:
             db['user_blacklist'].append(target_id)
         add_log(db, "PERMISSION", user_name, f"블랙리스트 추가 (ID: {target_id})")
 
     save_data(db)
     return jsonify({'status': 'success'})
 
+
 @app.route('/api/permission/remove', methods=['POST'])
 def api_permission_remove():
     user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
+    if not user: 
+        return jsonify({'error': 'Unauthorized'}), 401
 
     db = load_data()
-    if user['id'] not in db.get('admin_whitelist', []):
+    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
         return jsonify({'error': 'Forbidden'}), 403
 
     req_data = request.get_json() or {}
     target_id = str(req_data.get('target_id', '')).strip()
-    list_type = req_data.get('list_type')  # 'whitelist' or 'blacklist'
+    list_type = req_data.get('list_type')  # 'whitelist' 또는 'blacklist'
+
+    if not target_id:
+        return jsonify({'error': 'Target ID required'}), 400
 
     user_name = user.get('global_name') or user.get('username')
 
+    # 리스트 데이터 타입 안전성 확보
+    db['user_whitelist'] = [str(x) for x in db.get('user_whitelist', [])]
+    db['admin_whitelist'] = [str(x) for x in db.get('admin_whitelist', [])]
+    db['user_blacklist'] = [str(x) for x in db.get('user_blacklist', [])]
+
     if list_type == 'whitelist':
-        if target_id in db.get('user_whitelist', []):
+        if target_id in db['user_whitelist']:
             db['user_whitelist'].remove(target_id)
-        if target_id in db.get('admin_whitelist', []) and target_id not in DEFAULT_ADMINS:
+        if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
             db['admin_whitelist'].remove(target_id)
         add_log(db, "PERMISSION", user_name, f"화이트리스트 제거 (ID: {target_id})")
 
     elif list_type == 'blacklist':
-        if target_id in db.get('user_blacklist', []):
+        if target_id in db['user_blacklist']:
             db['user_blacklist'].remove(target_id)
         add_log(db, "PERMISSION", user_name, f"블랙리스트 차단 해제 (ID: {target_id})")
 
