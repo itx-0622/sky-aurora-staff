@@ -38,6 +38,11 @@ MANUALS = [
         "id": 2,
         "title": "02. 스태프 업무 수칙",
         "content": "SKY AURORA 스태프 업무 수행 시 아래 수칙을 준수해야 합니다.\n\n- 모든 변경 사항은 관리자 승인 후 반영되어야 합니다.\n- 시스템 장애 및 이상 접근 감지 시 즉시 보고를 진행합니다.\n- 공지사항을 정기적으로 확인하고 업데이트 내역을 숙지하세요."
+    },
+    {
+        "id": 3,
+        "title": "03. 비상 대응 프로토콜",
+        "content": "비상 상황 발생 시 아래 절차에 따라 즉시 조치하십시오.\n\n1. 보안 침해 감지 즉시 오너/관리자에게 디스코드 DM 보고\n2. 영향받은 서버 및 접속 세션 즉시 격리\n3. 상세 로그 수집 후 보고서 작성"
     }
 ]
 
@@ -82,11 +87,12 @@ HTML_TEMPLATE = """
             -ms-user-select: none !important;
             user-select: none !important;
             -webkit-touch-callout: none !important;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
             font-family: 'GmarketSansBold', 'Pretendard', sans-serif;
-            background: #04060d;
+            background: #030509;
             color: #ffffff;
             overflow: hidden;
             height: 100vh;
@@ -96,7 +102,7 @@ HTML_TEMPLATE = """
             align-items: center;
         }
 
-        /* 🔒 보안 경고 블랙아웃 오버레이 (최상단 z-index) */
+        /* 🔒 보안 경고 오버레이 */
         #security-overlay {
             position: fixed;
             top: 0;
@@ -127,7 +133,7 @@ HTML_TEMPLATE = """
             letter-spacing: -0.5px;
             margin-bottom: 12px;
             font-family: 'GmarketSansBold', sans-serif;
-            text-shadow: 0 0 15px rgba(255, 45, 85, 0.5);
+            text-shadow: 0 0 20px rgba(255, 45, 85, 0.6);
         }
 
         .alert-sub-text {
@@ -152,32 +158,32 @@ HTML_TEMPLATE = """
             z-index: 1;
         }
 
-        /* 메인 컨테이너 애니메이션 */
+        /* 메인 컨테이너 카드 */
         .container {
             position: relative;
             z-index: 2;
             width: 92%;
             max-width: 1100px;
             height: 88vh;
-            background: rgba(10, 15, 30, 0.75);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(0, 255, 200, 0.3);
+            background: rgba(8, 12, 24, 0.8);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(0, 255, 200, 0.25);
             border-radius: 24px;
-            box-shadow: 0 0 50px rgba(0, 255, 170, 0.15), inset 0 0 20px rgba(0, 255, 170, 0.05);
+            box-shadow: 0 0 60px rgba(0, 255, 170, 0.12), inset 0 0 30px rgba(0, 255, 170, 0.03);
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            animation: containerAppear 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: containerAppear 0.9s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         @keyframes containerAppear {
-            0% { opacity: 0; transform: translateY(20px) scale(0.97); }
+            0% { opacity: 0; transform: translateY(30px) scale(0.95); }
             100% { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         header {
             padding: 18px 28px;
-            background: rgba(6, 10, 22, 0.85);
+            background: rgba(5, 8, 18, 0.9);
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             justify-content: space-between;
@@ -195,7 +201,7 @@ HTML_TEMPLATE = """
 
         @keyframes glowText {
             0% { filter: drop-shadow(0 0 2px rgba(0, 242, 254, 0.2)); }
-            100% { filter: drop-shadow(0 0 10px rgba(0, 255, 170, 0.6)); }
+            100% { filter: drop-shadow(0 0 12px rgba(0, 255, 170, 0.7)); }
         }
 
         header .user-info {
@@ -230,22 +236,22 @@ HTML_TEMPLATE = """
             background: rgba(0, 255, 170, 0.1);
         }
 
-        /* 로그인 박스 및 반응형 디자인 */
+        /* 로그인 박스 파트 */
         .login-box {
-            padding: 50px 24px;
+            padding: 50px 28px;
             text-align: center;
             margin: auto;
-            max-width: 360px;
+            max-width: 380px;
             width: 100%;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(13, 20, 38, 0.75);
+            border: 1px solid rgba(0, 255, 170, 0.2);
             border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6), 0 0 25px rgba(0, 255, 170, 0.1);
             animation: fadeIn 0.6s ease;
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(15px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
@@ -255,7 +261,7 @@ HTML_TEMPLATE = """
             justify-content: center;
             gap: 12px;
             width: 100%;
-            padding: 14px;
+            padding: 15px;
             background: #5865F2;
             color: white;
             text-decoration: none;
@@ -269,9 +275,10 @@ HTML_TEMPLATE = """
         .discord-btn:hover {
             background: #4752C4;
             transform: translateY(-3px) scale(1.02);
-            box-shadow: 0 8px 25px rgba(88, 101, 242, 0.6);
+            box-shadow: 0 8px 25px rgba(88, 101, 242, 0.7);
         }
 
+        /* 대시보드 레이아웃 */
         .dashboard {
             display: flex;
             flex: 1;
@@ -279,7 +286,7 @@ HTML_TEMPLATE = """
         }
         .sidebar {
             width: 280px;
-            background: rgba(0, 0, 0, 0.3);
+            background: rgba(0, 0, 0, 0.35);
             border-right: 1px solid rgba(255, 255, 255, 0.08);
             padding: 24px 14px;
             overflow-y: auto;
@@ -375,33 +382,85 @@ HTML_TEMPLATE = """
 
         .main-content {
             flex: 1;
-            padding: 36px;
+            padding: 40px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
+            position: relative;
         }
+
+        /* 🎬 매뉴얼 영역 애니메이션 클래스 */
+        .doc-wrapper {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .doc-wrapper.manual-enter {
+            animation: manualEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .doc-wrapper.manual-exit {
+            animation: manualExit 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+        }
+
+        @keyframes manualEnter {
+            0% {
+                opacity: 0;
+                transform: translateY(35px) scale(0.98);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes manualExit {
+            0% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(35px) scale(0.98);
+            }
+        }
+
         .doc-title {
-            font-size: 22px;
-            margin-bottom: 20px;
+            font-size: 24px;
+            margin-bottom: 24px;
             color: #ffffff;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+            padding-bottom: 16px;
             letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
+
+        .doc-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 22px;
+            background: #00ffaa;
+            border-radius: 2px;
+            box-shadow: 0 0 10px #00ffaa;
+        }
+
         .doc-body {
             font-family: 'Pretendard', sans-serif;
             font-weight: 500;
             font-size: 15px;
-            line-height: 1.85;
+            line-height: 1.9;
             color: #cbd5e1;
             white-space: pre-wrap;
             flex: 1;
-            animation: contentFade 0.4s ease-out;
-        }
-
-        @keyframes contentFade {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
+            background: rgba(0, 0, 0, 0.2);
+            padding: 24px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         /* 📱 모바일 반응형 디자인 */
@@ -409,7 +468,7 @@ HTML_TEMPLATE = """
             .container {
                 width: 95%;
                 height: 94vh;
-                border-radius: 16px;
+                border-radius: 18px;
             }
             header {
                 padding: 14px 18px;
@@ -425,7 +484,7 @@ HTML_TEMPLATE = """
             }
             .sidebar {
                 width: 100%;
-                max-height: 150px;
+                max-height: 160px;
                 border-right: none;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.08);
                 padding: 12px;
@@ -438,6 +497,7 @@ HTML_TEMPLATE = """
             }
             .doc-body {
                 font-size: 14px;
+                padding: 16px;
             }
         }
     </style>
@@ -457,31 +517,31 @@ HTML_TEMPLATE = """
             if (overlay) overlay.style.display = 'none';
         }
 
-        // 🔒 Windows + Shift + S 선제 차단 (키 감지 즉시 화면 가림)
+        // 🔒 [PC] 단축키 시동(Shift, Win, Alt, Ctrl, PrintScreen) 즉시 화면 가림
         document.addEventListener('keydown', function(e) {
-            const k = e.key.toLowerCase();
-            
-            // Windows키, Shift키, Control키, PrintScreen 단독 또는 조합 감지 즉시 차단
             if (
-                e.key === 'Meta' || e.key === 'Win' || 
-                e.key === 'PrintScreen' || e.keyCode === 44 ||
-                e.key === 'F12' ||
+                e.key === 'Shift' || e.key === 'Meta' || e.key === 'Alt' || 
+                e.key === 'Control' || e.key === 'PrintScreen' || e.key === 'F12'
+            ) {
+                triggerSecurityLock();
+            }
+
+            const k = e.key.toLowerCase();
+            if (
                 (e.ctrlKey && ['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k)) ||
-                (e.metaKey && ['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k)) ||
-                (e.shiftKey && (e.key === 'S' || e.key === 's'))
+                (e.metaKey && ['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k))
             ) {
                 triggerSecurityLock();
             }
         }, true);
 
-        // 키를 뗄 때 락업 해제
         document.addEventListener('keyup', function(e) {
-            if (e.key === 'Meta' || e.key === 'Win' || e.key === 'Shift') {
-                setTimeout(releaseSecurityLock, 500);
+            if (!e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                releaseSecurityLock();
             }
         });
 
-        // 🔒 창 포커스 이탈 / 캡처 툴 실행 / 모바일 앱 전환 시 락업
+        // 🔒 [모바일/PC] 최근 앱 전환, 포커스 이탈, 알림창 내릴 때 가리기
         window.addEventListener('blur', triggerSecurityLock);
         window.addEventListener('focus', releaseSecurityLock);
         document.addEventListener('visibilitychange', function() {
@@ -493,36 +553,55 @@ HTML_TEMPLATE = """
         });
         window.addEventListener('pagehide', triggerSecurityLock);
 
-        // 마우스가 화면 상단(캡처 툴 영역)으로 이탈 시 선제 가림
         document.addEventListener('mouseleave', function(e) {
             if (e.clientY <= 0) {
                 triggerSecurityLock();
             }
         });
 
+        // 🎬 매뉴얼 전환 애니메이션 함수 (내려가고 ➔ 새로 띄워지기)
+        let isTransitioning = false;
+
         function selectManual(btnElement) {
+            if (isTransitioning) return;
+
+            const targetWrapper = btnElement.closest('.aurora-btn-wrapper');
+            if (targetWrapper.classList.contains('active')) return;
+
+            isTransitioning = true;
+
+            // 사이드바 버튼 active 상태 교체
             document.querySelectorAll('.aurora-btn-wrapper').forEach(w => w.classList.remove('active'));
-            const wrapper = btnElement.closest('.aurora-btn-wrapper');
-            if (wrapper) wrapper.classList.add('active');
-            
+            targetWrapper.classList.add('active');
+
             const title = btnElement.getAttribute('data-title');
             const content = btnElement.getAttribute('data-content');
-            
+
+            const docWrapper = document.getElementById('doc-wrapper');
             const titleEl = document.getElementById('doc-title');
             const bodyEl = document.getElementById('doc-body');
 
-            titleEl.innerText = title;
-            bodyEl.innerText = content;
+            // 1단계: 기존 매뉴얼 내려가며 사라지기 (Exit 애니메이션)
+            docWrapper.classList.remove('manual-enter');
+            docWrapper.classList.add('manual-exit');
 
-            // 애니메이션 재발동
-            bodyEl.style.animation = 'none';
-            bodyEl.offsetHeight; // trigger reflow
-            bodyEl.style.animation = 'contentFade 0.4s ease-out';
+            // 애니메이션(300ms) 완료 후 내용 변경 및 새로 올라오기 (Enter)
+            setTimeout(() => {
+                titleEl.innerText = title;
+                bodyEl.innerText = content;
+
+                docWrapper.classList.remove('manual-exit');
+                docWrapper.classList.add('manual-enter');
+
+                setTimeout(() => {
+                    isTransitioning = false;
+                }, 450);
+            }, 300);
         }
     </script>
 </head>
 <body>
-    <!-- 🔒 무단 캡처 및 복제 경고 오버레이 -->
+    <!-- 🔒 무단 캡처 경고 레이어 -->
     <div id="security-overlay">
         <div class="alert-icon">⚠️</div>
         <div class="alert-main-text">보안 경고: 무단 캡처 및 복제 금지</div>
@@ -582,15 +661,17 @@ HTML_TEMPLATE = """
                     {% endfor %}
                 </div>
                 <div class="main-content">
-                    <div id="doc-title" class="doc-title">{{ manuals[0].title if manuals else '매뉴얼이 없습니다.' }}</div>
-                    <div id="doc-body" class="doc-body">{{ manuals[0].content if manuals else '' }}</div>
+                    <div id="doc-wrapper" class="doc-wrapper manual-enter">
+                        <div id="doc-title" class="doc-title">{{ manuals[0].title if manuals else '매뉴얼이 없습니다.' }}</div>
+                        <div id="doc-body" class="doc-body">{{ manuals[0].content if manuals else '' }}</div>
+                    </div>
                 </div>
             </div>
         {% endif %}
     </div>
 
     <script>
-        // 🌌 오로라 Canvas 애니메이션 강화
+        // 🌌 오로라 Canvas 배경 애니메이션
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
 
@@ -601,12 +682,12 @@ HTML_TEMPLATE = """
         window.addEventListener('resize', resize);
         resize();
 
-        const stars = Array.from({ length: 150 }, () => ({
+        const stars = Array.from({ length: 160 }, () => ({
             x: Math.random() * canvas.width,
             y: Math.random() * canvas.height,
             size: Math.random() * 2,
             alpha: Math.random(),
-            speed: Math.random() * 0.015 + 0.005
+            speed: Math.random() * 0.012 + 0.005
         }));
 
         let tick = 0;
@@ -625,8 +706,8 @@ HTML_TEMPLATE = """
                 ctx.lineTo(x, y);
             }
 
-            ctx.lineTo(canvas.width, startY + 220);
-            ctx.lineTo(0, startY + 220);
+            ctx.lineTo(canvas.width, startY + 240);
+            ctx.lineTo(0, startY + 240);
             ctx.closePath();
 
             const grad = ctx.createLinearGradient(0, yOffset - 50, canvas.width, yOffset + 250);
@@ -634,7 +715,7 @@ HTML_TEMPLATE = """
             grad.addColorStop(1, color2);
 
             ctx.fillStyle = grad;
-            ctx.filter = 'blur(25px)';
+            ctx.filter = 'blur(28px)';
             ctx.fill();
             ctx.restore();
         }
@@ -653,21 +734,9 @@ HTML_TEMPLATE = """
 
             tick += 0.015;
 
-            drawRibbonAurora(
-                canvas.height * 0.06, 
-                70, 
-                'rgba(0, 255, 170, 0.4)', 
-                'rgba(0, 150, 255, 0.05)', 
-                0.9
-            );
-
-            drawRibbonAurora(
-                canvas.height * 0.10, 
-                90, 
-                'rgba(0, 180, 255, 0.3)', 
-                'rgba(140, 0, 255, 0.03)', 
-                1.3
-            );
+            drawRibbonAurora(canvas.height * 0.05, 75, 'rgba(0, 255, 170, 0.35)', 'rgba(0, 150, 255, 0.04)', 0.8);
+            drawRibbonAurora(canvas.height * 0.09, 95, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.2);
+            drawRibbonAurora(canvas.height * 0.15, 60, 'rgba(255, 0, 128, 0.15)', 'rgba(0, 255, 170, 0.02)', 0.5);
 
             requestAnimationFrame(animate);
         }
