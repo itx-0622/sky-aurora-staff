@@ -9,9 +9,13 @@ app.secret_key = 'sky_aurora_secret_key_9988'
 ACCESS_LOGS = []
 
 # ==========================================
-# ⚙️ 관리자(오너) 디스코드 ID 설정
+# ⚙️ 관리자(오너) 디스코드 ID 및 API 보안 키
 # ==========================================
 OWNER_DISCORD_ID = "843621337066504225"
+ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
+
+# 블랙리스트 ID 목록 (메모리 저장)
+BLACKLIST_IDS = set()
 
 # --------------------------------------------------
 # 🔑 디스코드 OAuth2 설정
@@ -634,7 +638,7 @@ HTML_TEMPLATE = """
                 <h2 style="font-size: 18px; color: #e2e8f0; margin-bottom: 24px; font-family: 'GmarketSansBold';">🔒 스태프 인증</h2>
                 
                 {% if error %}
-                    <div style="color:#ff5555; margin-bottom:15px; font-family: 'Pretendard'; font-size:13px;">{{ error }}</div>
+                    <div style="color:#ff5555; margin-bottom:15px; font-family: 'Pretendard'; font-size:13px; font-weight: bold;">{{ error }}</div>
                 {% endif %}
 
                 <a href="/login/discord" class="discord-btn">
@@ -800,6 +804,16 @@ def callback():
     user_data = user_res.json()
 
     discord_id = str(user_data.get('id', 'Unknown'))
+    
+    # 🚫 [핵심 추가] 디스코드 사용자 ID가 블랙리스트에 등록되어 있는지 검증
+    if discord_id in BLACKLIST_IDS:
+        return render_template_string(
+            HTML_TEMPLATE, 
+            authenticated=False, 
+            error="❌ 차단된 사용자 계정입니다.",
+            manuals=MANUALS
+        )
+
     username = user_data.get('global_name') or user_data.get('username', 'Unknown')
     avatar_hash = user_data.get('avatar')
     
@@ -844,6 +858,72 @@ def logout():
     session.pop('username', None)
     session.pop('avatar_url', None)
     return redirect(url_for('index'))
+
+# ==================================================
+# 🛠️ 관리자 앱 연동 API (PyQt6 앱 전용 경로)
+# ==================================================
+def check_admin_auth():
+    auth_key = request.headers.get('X-Admin-Key')
+    return auth_key == ADMIN_SECRET_KEY
+
+# 1. 매뉴얼 목록 조회 / 추가 / 수정 / 삭제
+@app.route('/api/admin/manuals', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def api_admin_manuals():
+    if not check_admin_auth():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if request.method == 'GET':
+        return jsonify(MANUALS)
+
+    elif request.method == 'POST':
+        # 매뉴얼 추가
+        data = request.json
+        new_id = max([m['id'] for m in MANUALS], default=0) + 1
+        new_manual = {
+            "id": new_id,
+            "title": data.get("title", ""),
+            "content": data.get("content", "")
+        }
+        MANUALS.append(new_manual)
+        return jsonify({"status": "success", "manual": new_manual})
+
+    elif request.method == 'PUT':
+        # 매뉴얼 수정
+        data = request.json
+        target_id = data.get("id")
+        for m in MANUALS:
+            if m['id'] == target_id:
+                m['title'] = data.get("title", m['title'])
+                m['content'] = data.get("content", m['content'])
+                return jsonify({"status": "success", "manual": m})
+        return jsonify({"error": "Not found"}), 404
+
+    elif request.method == 'DELETE':
+        # 매뉴얼 삭제
+        manual_id = request.args.get('id', type=int)
+        global MANUALS
+        MANUALS = [m for m in MANUALS if m['id'] != manual_id]
+        return jsonify({"status": "success"})
+
+# 2. 블랙리스트 ID 조회 / 추가 / 삭제
+@app.route('/api/admin/blacklist', methods=['GET', 'POST', 'DELETE'])
+def api_admin_blacklist():
+    if not check_admin_auth():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if request.method == 'GET':
+        return jsonify(list(BLACKLIST_IDS))
+
+    elif request.method == 'POST':
+        discord_id = str(request.json.get('discord_id', '')).strip()
+        if discord_id:
+            BLACKLIST_IDS.add(discord_id)
+            return jsonify({"status": "success", "blacklist": list(BLACKLIST_IDS)})
+
+    elif request.method == 'DELETE':
+        discord_id = str(request.args.get('discord_id', '')).strip()
+        BLACKLIST_IDS.discard(discord_id)
+        return jsonify({"status": "success", "blacklist": list(BLACKLIST_IDS)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
