@@ -21,17 +21,19 @@ app.config['SESSION_COOKIE_SECURE'] = False  # HTTP/HTTPS 환경 유연 대응
 app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
 
 # ==========================================
-# ⚙️ 설정 및 환경 변수
+# ⚙️ 설정 및 환경 변수 (보안을 위해 환경 변수 처리)
 # ==========================================
-CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "1534184089144266872")
-CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "YOUR_DISCORD_CLIENT_SECRET")
+CLIENT_ID = "1534184089144266872"
+CLIENT_SECRET = "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm"
 BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
 
 DATA_FILE = "sky_aurora_admin_data.json"
 DEFAULT_ADMINS = ["1534184089144266872", "843621337066504225"]
 
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-GITHUB_REPO = os.environ.get("GITHUB_REPO")
+# 깃허브 토큰과 레포지토리는 환경 변수에서 안전하게 불러옵니다.
+# (배포 환경이나 로컬 환경 변수에 GITHUB_TOKEN을 설정해주세요)
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_REPO = "itx-0622/sky-aurora-staff"
 
 # --------------------------------------------------
 # 📁 데이터 저장/불러오기
@@ -60,8 +62,6 @@ def load_data():
     if not data:
         data = {
             "admin_whitelist": DEFAULT_ADMINS,
-            "user_whitelist": [],
-            "user_blacklist": [],
             "manuals": [
                 {
                     "id": 1,
@@ -300,8 +300,6 @@ MAIN_HTML_TEMPLATE = """
             </button>
         </div>
 
-        <!-- 화이트리스트 차단 박스 제거됨 (모두 접속 가능) -->
-
         <div id="main-dashboard" class="dashboard" style="display:none;">
             <div class="sidebar">
                 <div id="manual-sidebar-categorized"></div>
@@ -312,7 +310,7 @@ MAIN_HTML_TEMPLATE = """
                         <button class="item-btn" onclick="switchAdminTab('m-manage')">📖 매뉴얼 등록/수정</button>
                     </div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-permissions">
-                        <button class="item-btn" onclick="switchAdminTab('permissions')">🛡️ 권한 수정 및 관리</button>
+                        <button class="item-btn" onclick="switchAdminTab('permissions')">🛡️ 어드민 권한 관리</button>
                     </div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-logs">
                         <button class="item-btn" onclick="switchAdminTab('logs')">📜 실시간 접속 로그</button>
@@ -346,7 +344,7 @@ MAIN_HTML_TEMPLATE = """
                 </div>
 
                 <div id="view-admin-permissions" class="tab-enter" style="display:none;">
-                    <div class="doc-title">스태프 및 어드민 권한 수정/관리</div>
+                    <div class="doc-title">어드민 권한 업그레이드 및 관리</div>
                     <div class="content-card" style="margin-bottom:20px;">
                         <div style="display:flex; gap:10px; margin-bottom:12px;">
                             <input type="text" id="perm-search-input" placeholder="조회할 디스코드 ID 또는 @사용자명 입력" style="margin:0; flex:1;">
@@ -363,24 +361,13 @@ MAIN_HTML_TEMPLATE = """
                         </div>
 
                         <div style="display:flex; gap:10px;">
-                            <select id="perm-role-select" style="margin:0; flex:1;">
-                                <option value="staff">스태프 (STAFF - 일반 접근 권한)</option>
-                                <option value="admin">어드민 (ADMIN - 전체 최고 관리 권한)</option>
-                            </select>
-                            <button onclick="applyPermission('add')" class="btn-ui">화이트리스트 등록</button>
-                            <button onclick="applyPermission('blacklist')" class="btn-ui btn-danger">⚠️ 블랙리스트 등록</button>
+                            <button onclick="applyAdminUpgrade()" class="btn-ui" style="flex:1;">⚡ 해당 사용자 어드민(ADMIN)으로 업그레이드</button>
                         </div>
                     </div>
 
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-                        <div class="content-card">
-                            <h3 style="color:#00ffaa; margin-bottom:12px; font-size:15px;">🟢 승인된 사용자 명단 (화이트리스트)</h3>
-                            <ul id="perm-wl-list" class="data-list"></ul>
-                        </div>
-                        <div class="content-card">
-                            <h3 style="color:#ff2d55; margin-bottom:12px; font-size:15px;">🔴 차단된 사용자 명단 (블랙리스트)</h3>
-                            <ul id="perm-bl-list" class="data-list"></ul>
-                        </div>
+                    <div class="content-card">
+                        <h3 style="color:#ff2d55; margin-bottom:12px; font-size:15px;">🛡️ 현재 등록된 어드민 명단</h3>
+                        <ul id="perm-admin-list" class="data-list"></ul>
                     </div>
                 </div>
 
@@ -423,7 +410,7 @@ MAIN_HTML_TEMPLATE = """
         }
         animate();
 
-        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], logs: [] };
+        let appState = { user: null, role: null, manuals: [], admin_whitelist: [], logs: [] };
         let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
@@ -432,21 +419,6 @@ MAIN_HTML_TEMPLATE = """
         async function syncSystemState() {
             try {
                 const res = await fetch(`${window.location.origin}/api/state`);
-                
-                // 블랙리스트 차단만 유지 (화이트리스트 제한은 해제됨)
-                if (res.status === 403) {
-                    const errData = await res.json();
-                    document.getElementById('login-box').style.display = 'none';
-                    document.getElementById('main-dashboard').style.display = 'none';
-                    document.getElementById('user-header-info').style.display = 'none';
-                    
-                    if (errData.reason === 'blacklisted') {
-                        alert("귀하의 계정은 블랙리스트로 등록되어 접속이 차단되었습니다.");
-                        location.href = '/logout';
-                    }
-                    return;
-                }
-
                 if (res.ok) {
                     const data = await res.json();
                     if (data.status === 'unauthorized') {
@@ -473,13 +445,6 @@ MAIN_HTML_TEMPLATE = """
                 }
             } catch(e) { console.error("Sync error:", e); }
         }
-
-        // 블랙리스트 변경 감지 폴링
-        setInterval(() => {
-            if (document.getElementById('main-dashboard').style.display === 'flex') {
-                syncSystemState();
-            }
-        }, 8000);
 
         function runCustomIntro(nickname, username, avatarUrl, onComplete) {
             const introOverlay = document.getElementById('intro-overlay');
@@ -599,24 +564,14 @@ MAIN_HTML_TEMPLATE = """
         }
 
         function renderPermissionsLists() {
-            const wlUl = document.getElementById('perm-wl-list');
-            const blUl = document.getElementById('perm-bl-list');
-            wlUl.innerHTML = '';
-            blUl.innerHTML = '';
+            const adminUl = document.getElementById('perm-admin-list');
+            adminUl.innerHTML = '';
 
-            appState.user_whitelist.forEach(id => {
-                const isAdmin = appState.admin_whitelist.includes(String(id));
+            appState.admin_whitelist.forEach(id => {
                 const li = document.createElement('li');
-                li.innerHTML = `<span>ID: ${id} ${isAdmin ? '<strong style="color:#ff2d55;">(ADMIN)</strong>' : ''}</span>
-                                <button onclick="removePermission('${id}', 'whitelist')" class="btn-ui btn-danger" style="padding:4px 8px; font-size:11px;">제거</button>`;
-                wlUl.appendChild(li);
-            });
-
-            appState.user_blacklist.forEach(id => {
-                const li = document.createElement('li');
-                li.innerHTML = `<span>ID: ${id}</span>
-                                <button onclick="removePermission('${id}', 'blacklist')" class="btn-ui" style="padding:4px 8px; font-size:11px;">해제</button>`;
-                blUl.appendChild(li);
+                li.innerHTML = `<span>어드민 ID: ${id}</span>
+                                <button onclick="removeAdmin('${id}')" class="btn-ui btn-danger" style="padding:4px 8px; font-size:11px;">권한 회수</button>`;
+                adminUl.appendChild(li);
             });
         }
 
@@ -717,39 +672,38 @@ MAIN_HTML_TEMPLATE = """
             } catch(e) { alert('조회 중 오류가 발생했습니다.'); }
         }
 
-        async function applyPermission(actionType) {
+        async function applyAdminUpgrade() {
             const query = document.getElementById('perm-search-input').value.trim();
             const targetId = searchedTargetUser ? searchedTargetUser.id : query;
-            const role = document.getElementById('perm-role-select').value;
 
             if (!targetId) { alert('유효한 디스코드 ID를 입력하세요.'); return; }
 
-            const res = await fetch(`${window.location.origin}/api/permission/apply`, {
+            const res = await fetch(`${window.location.origin}/api/permission/upgrade`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target_id: String(targetId), action: actionType, role: role })
+                body: JSON.stringify({ target_id: String(targetId) })
             });
 
             if (res.ok) {
-                alert('권한 상태가 정상 변경되었습니다.');
+                alert('성공적으로 어드민 권한으로 업그레이드되었습니다.');
                 syncSystemState();
             } else {
-                alert('권한 변경에 실패했습니다.');
+                alert('어드민 업그레이드에 실패했습니다.');
             }
         }
 
-        async function removePermission(targetId, listType) {
-            if (!confirm(`사용자(${targetId})를 ${listType} 목록에서 제거하시겠습니까?`)) return;
+        async function removeAdmin(targetId) {
+            if (!confirm(`사용자(${targetId})의 어드민 권한을 회수하시겠습니까?`)) return;
 
-            const res = await fetch(`${window.location.origin}/api/permission/remove`, {
+            const res = await fetch(`${window.location.origin}/api/permission/remove-admin`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target_id: String(targetId), list_type: listType })
+                body: JSON.stringify({ target_id: String(targetId) })
             });
 
             if (res.ok) {
                 syncSystemState();
-            } else { alert('제거에 실패했습니다.'); }
+            } else { alert('권한 회수에 실패했습니다.'); }
         }
 
         window.onload = syncSystemState;
@@ -800,7 +754,7 @@ def callback():
 
                 db = load_data()
                 user_name = user_data.get('global_name') or user_data.get('username')
-                add_log(db, "AUTH", user_name, "시스템 인증 완료")
+                add_log(db, "AUTH", user_name, "시스템 로그인 완료")
                 save_data(db)
 
     except Exception as e:
@@ -822,11 +776,6 @@ def api_state():
     db = load_data()
     user_id = str(user['id'])
 
-    # 1. 블랙리스트 검증 (차단된 사용자만 접근 거부)
-    if user_id in [str(b) for b in db.get('user_blacklist', [])]:
-        return jsonify({'error': 'Forbidden', 'reason': 'blacklisted'}), 403
-
-    # 2. 화이트리스트가 아니어도 기본적으로 스태프 권한으로 접속 허용
     is_admin = user_id in [str(a) for a in db.get('admin_whitelist', [])]
     role = 'admin' if is_admin else 'staff'
 
@@ -835,8 +784,6 @@ def api_state():
         'user': user,
         'role': role,
         'manuals': db.get('manuals', []),
-        'user_whitelist': db.get('user_whitelist', []),
-        'user_blacklist': db.get('user_blacklist', []),
         'admin_whitelist': db.get('admin_whitelist', []),
         'logs': db.get('logs', []) if is_admin else []
     })
@@ -922,8 +869,8 @@ def api_manual_delete():
 
     return jsonify({'error': 'Invalid index'}), 400
 
-@app.route('/api/permission/apply', methods=['POST'], strict_slashes=False)
-def api_permission_apply():
+@app.route('/api/permission/upgrade', methods=['POST'], strict_slashes=False)
+def api_permission_upgrade():
     user = session.get('user')
     if not user: return jsonify({'error': 'Unauthorized'}), 401
 
@@ -933,46 +880,21 @@ def api_permission_apply():
 
     req_data = request.get_json() or {}
     target_id = str(req_data.get('target_id', '')).strip()
-    action = req_data.get('action')
-    role = req_data.get('role', 'staff')
 
     if not target_id: return jsonify({'error': 'Target ID required'}), 400
 
     user_name = user.get('global_name') or user.get('username')
-
-    db['user_whitelist'] = [str(x) for x in db.get('user_whitelist', [])]
     db['admin_whitelist'] = [str(x) for x in db.get('admin_whitelist', [])]
-    db['user_blacklist'] = [str(x) for x in db.get('user_blacklist', [])]
 
-    if action == 'add':
-        if target_id in db['user_blacklist']:
-            db['user_blacklist'].remove(target_id)
-        if target_id not in db['user_whitelist']:
-            db['user_whitelist'].append(target_id)
-
-        if role == 'admin':
-            if target_id not in db['admin_whitelist']:
-                db['admin_whitelist'].append(target_id)
-            add_log(db, "PERMISSION", user_name, f"어드민 권한 부여 (ID: {target_id})")
-        else:
-            if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
-                db['admin_whitelist'].remove(target_id)
-            add_log(db, "PERMISSION", user_name, f"스태프 권한 부여 (ID: {target_id})")
-
-    elif action == 'blacklist':
-        if target_id in db['user_whitelist']:
-            db['user_whitelist'].remove(target_id)
-        if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
-            db['admin_whitelist'].remove(target_id)
-        if target_id not in db['user_blacklist']:
-            db['user_blacklist'].append(target_id)
-        add_log(db, "PERMISSION", user_name, f"블랙리스트 추가 (ID: {target_id})")
+    if target_id not in db['admin_whitelist']:
+        db['admin_whitelist'].append(target_id)
+        add_log(db, "PERMISSION", user_name, f"어드민 권한 업그레이드 (ID: {target_id})")
 
     save_data(db)
     return jsonify({'status': 'success'})
 
-@app.route('/api/permission/remove', methods=['POST'], strict_slashes=False)
-def api_permission_remove():
+@app.route('/api/permission/remove-admin', methods=['POST'], strict_slashes=False)
+def api_permission_remove_admin():
     user = session.get('user')
     if not user: return jsonify({'error': 'Unauthorized'}), 401
 
@@ -982,30 +904,19 @@ def api_permission_remove():
 
     req_data = request.get_json() or {}
     target_id = str(req_data.get('target_id', '')).strip()
-    list_type = req_data.get('list_type')
 
     if not target_id: return jsonify({'error': 'Target ID required'}), 400
 
     user_name = user.get('global_name') or user.get('username')
-
-    db['user_whitelist'] = [str(x) for x in db.get('user_whitelist', [])]
     db['admin_whitelist'] = [str(x) for x in db.get('admin_whitelist', [])]
-    db['user_blacklist'] = [str(x) for x in db.get('user_blacklist', [])]
 
-    if list_type == 'whitelist':
-        if target_id in db['user_whitelist']:
-            db['user_whitelist'].remove(target_id)
-        if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
-            db['admin_whitelist'].remove(target_id)
-        add_log(db, "PERMISSION", user_name, f"화이트리스트 제거 (ID: {target_id})")
+    if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
+        db['admin_whitelist'].remove(target_id)
+        add_log(db, "PERMISSION", user_name, f"어드민 권한 회수 (ID: {target_id})")
+        save_data(db)
+        return jsonify({'status': 'success'})
 
-    elif list_type == 'blacklist':
-        if target_id in db['user_blacklist']:
-            db['user_blacklist'].remove(target_id)
-        add_log(db, "PERMISSION", user_name, f"블랙리스트 차단 해제 (ID: {target_id})")
-
-    save_data(db)
-    return jsonify({'status': 'success'})
+    return jsonify({'error': 'Cannot remove default admin or user not in list'}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
