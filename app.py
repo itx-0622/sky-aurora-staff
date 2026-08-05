@@ -10,9 +10,9 @@ VALID_AUTH_CODE = "1234"
 ACCESS_LOGS = []
 
 # ==========================================
-# ⚙️ 관리자(오너) 디스코드 ID 설정 (로그 확인용)
+# ⚙️ 관리자(오너) 디스코드 ID 설정
 # ==========================================
-OWNER_DISCORD_ID = "843621337066504225" # 본인의 디스코드 숫자 ID로 변경 가능
+OWNER_DISCORD_ID = "843621337066504225"
 
 # --------------------------------------------------
 # 🔑 디스코드 OAuth2 설정
@@ -63,7 +63,7 @@ HTML_TEMPLATE = """
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>SKY AURORA STAFF 매뉴얼</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
     <style>
@@ -91,28 +91,56 @@ HTML_TEMPLATE = """
             color: #ffffff;
             overflow: hidden;
             height: 100vh;
+            width: 100vw;
             display: flex;
             justify-content: center;
             align-items: center;
         }
 
-        /* 🔒 강력한 보안 차단 오버레이 (캡처 시도 및 창 이탈 시 작동) */
+        /* 🔒 보안 경고 블랙아웃 오버레이 */
         #security-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: #060913;
-            z-index: 999999;
+            background: #000000;
+            z-index: 9999999;
             display: none;
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .alert-icon {
+            font-size: 80px;
             color: #ff2d55;
-            font-size: 24px;
+            margin-bottom: 20px;
+            animation: pulse 1.5s infinite;
+        }
+
+        .alert-main-text {
+            font-size: 26px;
             font-weight: bold;
-            letter-spacing: -1px;
+            color: #ff2d55;
+            letter-spacing: -0.5px;
+            margin-bottom: 12px;
+            font-family: 'GmarketSansBold', sans-serif;
+        }
+
+        .alert-sub-text {
+            font-size: 15px;
+            color: #a0aec0;
+            font-family: 'Pretendard', sans-serif;
+            line-height: 1.6;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
         }
 
         #bg-canvas {
@@ -127,9 +155,9 @@ HTML_TEMPLATE = """
         .container {
             position: relative;
             z-index: 2;
-            width: 90%;
+            width: 92%;
             max-width: 1100px;
-            height: 85vh;
+            height: 88vh;
             background: rgba(12, 18, 36, 0.75);
             backdrop-filter: blur(16px);
             border: 1px solid rgba(0, 255, 200, 0.3);
@@ -141,7 +169,7 @@ HTML_TEMPLATE = """
         }
 
         header {
-            padding: 22px 30px;
+            padding: 18px 24px;
             background: rgba(8, 14, 28, 0.85);
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
@@ -149,7 +177,7 @@ HTML_TEMPLATE = """
             align-items: center;
         }
         header h1 {
-            font-size: 22px;
+            font-size: 20px;
             font-weight: bold;
             letter-spacing: 1px;
             background: linear-gradient(90deg, #00f2fe, #4facfe, #00ffaa);
@@ -159,14 +187,35 @@ HTML_TEMPLATE = """
         header .user-info {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
+
+        /* 디스코드 프로필 아바타 이미지 스타일 */
+        .avatar-img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid #00ffaa;
+            object-fit: cover;
+        }
+        .avatar-placeholder {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #5865F2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
         header .logout-btn {
             font-family: 'Pretendard', sans-serif;
             color: #8a99ad;
             text-decoration: none;
-            font-size: 13px;
-            padding: 6px 14px;
+            font-size: 12px;
+            padding: 6px 12px;
             border: 1px solid rgba(255,255,255,0.15);
             border-radius: 6px;
             transition: 0.3s;
@@ -177,10 +226,10 @@ HTML_TEMPLATE = """
         }
 
         .login-box {
-            padding: 40px 30px;
+            padding: 40px 20px;
             text-align: center;
             margin: auto;
-            max-width: 400px;
+            max-width: 380px;
             width: 100%;
         }
         .login-box input[type="password"] {
@@ -192,7 +241,7 @@ HTML_TEMPLATE = """
             border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 8px;
             color: #fff;
-            font-size: 16px;
+            font-size: 15px;
             outline: none;
             text-align: center;
         }
@@ -214,7 +263,7 @@ HTML_TEMPLATE = """
             border-radius: 8px;
             font-family: 'Pretendard', sans-serif;
             font-weight: bold;
-            font-size: 15px;
+            font-size: 14px;
             transition: background 0.2s, transform 0.2s;
             margin-bottom: 20px;
         }
@@ -246,23 +295,23 @@ HTML_TEMPLATE = """
             overflow: hidden;
         }
         .sidebar {
-            width: 310px;
+            width: 280px;
             background: rgba(0, 0, 0, 0.25);
             border-right: 1px solid rgba(255, 255, 255, 0.08);
-            padding: 24px 14px;
+            padding: 20px 12px;
             overflow-y: auto;
         }
         .sidebar h2 {
-            font-size: 13px;
+            font-size: 12px;
             color: #7f8c8d;
             letter-spacing: 1px;
-            margin-bottom: 18px;
+            margin-bottom: 16px;
             padding-left: 8px;
         }
 
         .aurora-btn-wrapper {
             position: relative;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             border-radius: 12px;
             overflow: hidden;
             padding: 2px;
@@ -317,13 +366,13 @@ HTML_TEMPLATE = """
             z-index: 1;
             width: 100%;
             text-align: left;
-            padding: 14px 18px;
+            padding: 12px 16px;
             background: rgba(12, 18, 36, 0.95);
             border: none;
             color: #8a99ad;
             border-radius: 10px;
             cursor: pointer;
-            font-size: 15px;
+            font-size: 14px;
             transition: color 0.2s, background 0.2s;
             display: block;
         }
@@ -342,68 +391,110 @@ HTML_TEMPLATE = """
 
         .main-content {
             flex: 1;
-            padding: 35px;
+            padding: 30px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
         }
         .doc-title {
-            font-size: 24px;
-            margin-bottom: 22px;
+            font-size: 20px;
+            margin-bottom: 18px;
             color: #ffffff;
             border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-            padding-bottom: 14px;
+            padding-bottom: 12px;
             letter-spacing: 0.5px;
         }
         .doc-body {
             font-family: 'Pretendard', sans-serif;
             font-weight: 500;
-            font-size: 16px;
-            line-height: 1.85;
+            font-size: 15px;
+            line-height: 1.8;
             color: #e2e8f0;
             white-space: pre-wrap;
             flex: 1;
         }
+
+        /* 📱 모바일 반응형 디자인 최적화 */
+        @media (max-width: 768px) {
+            .container {
+                width: 95%;
+                height: 94vh;
+                border-radius: 14px;
+            }
+            header {
+                padding: 14px 16px;
+            }
+            header h1 {
+                font-size: 16px;
+            }
+            .user-info span {
+                display: none; /* 모바일에서 긴 이름 생략 */
+            }
+            .dashboard {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                max-height: 140px;
+                border-right: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                padding: 12px;
+            }
+            .main-content {
+                padding: 18px;
+            }
+            .doc-title {
+                font-size: 17px;
+            }
+            .doc-body {
+                font-size: 14px;
+            }
+        }
     </style>
     <script>
-        // 🔒 강력한 보안 제어 (캡처 단축키 및 우클릭 원천 차단)
+        // 🔒 강력한 보안 차단 메커니즘 (우클릭, 선택, 드래그 원천 차단)
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('selectstart', e => e.preventDefault());
         document.addEventListener('dragstart', e => e.preventDefault());
 
+        function triggerSecurityLock() {
+            const overlay = document.getElementById('security-overlay');
+            if (overlay) overlay.style.display = 'flex';
+        }
+
+        function releaseSecurityLock() {
+            const overlay = document.getElementById('security-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+
+        // 🔒 단축키 기반 탈취 시도 차단 (F12, Ctrl+C/V/U/S/P/A, PrintScreen, Shift+S 등)
         document.addEventListener('keydown', function(e) {
+            const k = e.key.toLowerCase();
             if (
                 e.key === 'PrintScreen' ||
                 e.keyCode === 44 ||
-                e.key === 'Meta' ||
-                e.key === 'OS' ||
-                (e.shiftKey && e.key === 'S') ||
                 e.key === 'F12' ||
-                (e.ctrlKey && ['c', 'u', 's', 'a', 'p', 'i', 'j'].includes(e.key.toLowerCase()))
+                (e.ctrlKey && ['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k)) ||
+                (e.metaKey && ['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k)) ||
+                (e.shiftKey && (e.key === 'S' || e.key === 's'))
             ) {
                 e.preventDefault();
-                showSecurityOverlay();
-                alert('🔒 보안 정책에 의해 화면 캡처, 복사 및 개발자 도구 사용이 금지되어 있습니다.');
+                e.stopPropagation();
+                triggerSecurityLock();
             }
         });
 
-        function showSecurityOverlay() {
-            document.getElementById('security-overlay').style.display = 'flex';
-        }
-        function hideSecurityOverlay() {
-            document.getElementById('security-overlay').style.display = 'none';
-        }
-
-        // 창 이탈(화면 전환, 다른 앱 실행, 캡처 도구 호출 등) 감지 시 즉시 블랙아웃 차단
-        window.addEventListener('blur', showSecurityOverlay);
-        window.addEventListener('focus', hideSecurityOverlay);
+        // 🔒 창 이탈 / 화면 캡처 프로그램 호출 / 화면 전환 시 즉시 락업
+        window.addEventListener('blur', triggerSecurityLock);
+        window.addEventListener('focus', releaseSecurityLock);
         document.addEventListener('visibilitychange', function() {
             if (document.hidden) {
-                showSecurityOverlay();
+                triggerSecurityLock();
             } else {
-                hideSecurityOverlay();
+                releaseSecurityLock();
             }
         });
+        window.addEventListener('pagehide', triggerSecurityLock);
 
         function selectManual(btnElement) {
             document.querySelectorAll('.aurora-btn-wrapper').forEach(w => w.classList.remove('active'));
@@ -419,9 +510,14 @@ HTML_TEMPLATE = """
     </script>
 </head>
 <body>
+    <!-- 🔒 무단 탈취 경고 오버레이 -->
     <div id="security-overlay">
-        <span>🔒 보안 정책으로 인해 화면이 보호됩니다.</span>
-        <span style="font-size: 14px; color: #8a99ad; margin-top: 10px; font-family: 'Pretendard';">화면 캡처 또는 외부 유출 시도가 기록됩니다.</span>
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-main-text">보안 경고: 무단 캡처 및 복제 금지</div>
+        <div class="alert-sub-text">
+            본 시스템의 정보 무단 캡처, 복사, 개발자 도구 활용 시도는 엄격히 금지되어 있습니다.<br>
+            접근 시도 및 접속 IP 정보가 보안 기록에 실시간 저장됩니다.
+        </div>
     </div>
 
     <canvas id="bg-canvas"></canvas>
@@ -431,8 +527,13 @@ HTML_TEMPLATE = """
             <h1>SKY AURORA STAFF 매뉴얼</h1>
             {% if authenticated %}
                 <div class="user-info">
+                    {% if avatar_url %}
+                        <img src="{{ avatar_url }}" alt="Avatar" class="avatar-img">
+                    {% else %}
+                        <div class="avatar-placeholder">👤</div>
+                    {% endif %}
                     <span style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard';">
-                        👤 {{ username }} (ID: {{ session.get('discord_id', 'N/A') }})
+                        {{ username }}
                     </span>
                     <a href="/logout" class="logout-btn">로그아웃</a>
                 </div>
@@ -441,7 +542,7 @@ HTML_TEMPLATE = """
 
         {% if not authenticated %}
             <div class="login-box">
-                <h2 style="font-size: 19px; color: #e2e8f0; margin-bottom: 20px;">🔒 스태프 인증</h2>
+                <h2 style="font-size: 18px; color: #e2e8f0; margin-bottom: 20px;">🔒 스태프 인증</h2>
                 
                 <a href="/login/discord" class="discord-btn">
                     <svg width="20" height="15" viewBox="0 0 127.14 96.36" fill="currentColor">
@@ -453,13 +554,13 @@ HTML_TEMPLATE = """
                 <div class="divider">OR</div>
 
                 {% if error %}
-                    <div class="alert-error" style="color:#ff5555; margin-top:10px; font-family: 'Pretendard';">{{ error }}</div>
+                    <div class="alert-error" style="color:#ff5555; margin-top:10px; font-family: 'Pretendard'; font-size:13px;">{{ error }}</div>
                 {% endif %}
 
                 <form method="POST" action="/login">
                     <input type="password" name="auth_code" placeholder="인증코드 입력" required autocomplete="off">
                     <div class="aurora-btn-wrapper active" style="margin-top: 18px;">
-                        <button type="submit" class="item-btn" style="text-align: center; font-family: 'GmarketSansBold'; font-size: 16px;">인증코드로 로그인</button>
+                        <button type="submit" class="item-btn" style="text-align: center; font-family: 'GmarketSansBold'; font-size: 15px;">인증코드로 로그인</button>
                     </div>
                 </form>
             </div>
@@ -498,7 +599,7 @@ HTML_TEMPLATE = """
         window.addEventListener('resize', resize);
         resize();
 
-        const stars = Array.from({ length: 140 }, () => ({
+        const stars = Array.from({ length: 120 }, () => ({
             x: Math.random() * canvas.width,
             y: Math.random() * canvas.height,
             size: Math.random() * 1.8,
@@ -578,10 +679,12 @@ HTML_TEMPLATE = """
 def index():
     is_auth = session.get('authenticated', False)
     username = session.get('username', '스태프')
+    avatar_url = session.get('avatar_url')
     return render_template_string(
         HTML_TEMPLATE, 
         authenticated=is_auth, 
         username=username,
+        avatar_url=avatar_url,
         manuals=MANUALS
     )
 
@@ -627,6 +730,12 @@ def callback():
 
     discord_id = str(user_data.get('id', 'Unknown'))
     username = user_data.get('global_name') or user_data.get('username', 'Unknown')
+    avatar_hash = user_data.get('avatar')
+    
+    # 디스코드 아바타 URL 생성 (프로필 사진 존재 여부 확인)
+    avatar_url = None
+    if avatar_hash:
+        avatar_url = f"https://cdn.discordapp.com/avatars/{discord_id}/{avatar_hash}.png"
 
     user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     if user_ip and ',' in user_ip:
@@ -635,7 +744,6 @@ def callback():
     location_info = get_location_from_ip(user_ip)
     now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # 상세 로그 기록 (디스코드 ID 포함)
     ACCESS_LOGS.insert(0, {
         "discord_id": discord_id,
         "user": username,
@@ -648,6 +756,7 @@ def callback():
     session['authenticated'] = True
     session['discord_id'] = discord_id
     session['username'] = username
+    session['avatar_url'] = avatar_url
     
     return redirect(url_for('index'))
 
@@ -675,6 +784,7 @@ def login():
         session['authenticated'] = True
         session['discord_id'] = "SYSTEM"
         session['username'] = "스태프(코드인증)"
+        session['avatar_url'] = None
         return redirect(url_for('index'))
     else:
         return render_template_string(
@@ -684,7 +794,6 @@ def login():
             manuals=MANUALS
         )
 
-# 📊 관리자 전용 접속 로그 확인 API (접속한 디스코드 ID 및 IP 확인 가능)
 @app.route('/admin/logs')
 def admin_logs():
     discord_id = session.get('discord_id')
@@ -694,9 +803,10 @@ def admin_logs():
 
 @app.route('/logout')
 def logout():
-    session.pop('authenticated', None, )
+    session.pop('authenticated', None)
     session.pop('discord_id', None)
     session.pop('username', None)
+    session.pop('avatar_url', None)
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
