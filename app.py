@@ -6,7 +6,6 @@ from flask import Flask, request, render_template_string, redirect, url_for, ses
 app = Flask(__name__)
 app.secret_key = 'sky_aurora_secret_key_9988'
 
-VALID_AUTH_CODE = "1234"
 ACCESS_LOGS = []
 
 # ==========================================
@@ -33,7 +32,7 @@ MANUALS = [
     {
         "id": 1,
         "title": "01. 기본 보안 지침",
-        "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템의 화면을 캡처하거나 촬영하는 행위를 금지합니다.\n2. 인증 계정 및 코드는 타인에게 공유할 수 없습니다.\n3. 시스템 이용 시 접속 IP 및 접근 위치가 실시간 기록됩니다."
+        "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템의 화면을 캡처하거나 촬영하는 행위를 금지합니다.\n2. 인증 계정은 타인에게 공유할 수 없습니다.\n3. 시스템 이용 시 접속 IP 및 접근 위치가 실시간 기록됩니다."
     },
     {
         "id": 2,
@@ -87,7 +86,7 @@ HTML_TEMPLATE = """
 
         body {
             font-family: 'GmarketSansBold', 'Pretendard', sans-serif;
-            background: #060913;
+            background: #04060d;
             color: #ffffff;
             overflow: hidden;
             height: 100vh;
@@ -97,7 +96,7 @@ HTML_TEMPLATE = """
             align-items: center;
         }
 
-        /* 🔒 보안 경고 블랙아웃 오버레이 */
+        /* 🔒 보안 경고 블랙아웃 오버레이 (최상단 z-index) */
         #security-overlay {
             position: fixed;
             top: 0;
@@ -105,7 +104,7 @@ HTML_TEMPLATE = """
             width: 100vw;
             height: 100vh;
             background: #000000;
-            z-index: 9999999;
+            z-index: 99999999;
             display: none;
             flex-direction: column;
             justify-content: center;
@@ -118,7 +117,7 @@ HTML_TEMPLATE = """
             font-size: 80px;
             color: #ff2d55;
             margin-bottom: 20px;
-            animation: pulse 1.5s infinite;
+            animation: pulse 1.2s infinite ease-in-out;
         }
 
         .alert-main-text {
@@ -128,6 +127,7 @@ HTML_TEMPLATE = """
             letter-spacing: -0.5px;
             margin-bottom: 12px;
             font-family: 'GmarketSansBold', sans-serif;
+            text-shadow: 0 0 15px rgba(255, 45, 85, 0.5);
         }
 
         .alert-sub-text {
@@ -139,7 +139,7 @@ HTML_TEMPLATE = """
 
         @keyframes pulse {
             0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.1); opacity: 0.8; }
+            50% { transform: scale(1.15); opacity: 0.7; }
             100% { transform: scale(1); opacity: 1; }
         }
 
@@ -152,26 +152,33 @@ HTML_TEMPLATE = """
             z-index: 1;
         }
 
+        /* 메인 컨테이너 애니메이션 */
         .container {
             position: relative;
             z-index: 2;
             width: 92%;
             max-width: 1100px;
             height: 88vh;
-            background: rgba(12, 18, 36, 0.75);
-            backdrop-filter: blur(16px);
+            background: rgba(10, 15, 30, 0.75);
+            backdrop-filter: blur(20px);
             border: 1px solid rgba(0, 255, 200, 0.3);
-            border-radius: 20px;
-            box-shadow: 0 0 50px rgba(0, 255, 170, 0.2);
+            border-radius: 24px;
+            box-shadow: 0 0 50px rgba(0, 255, 170, 0.15), inset 0 0 20px rgba(0, 255, 170, 0.05);
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            animation: containerAppear 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes containerAppear {
+            0% { opacity: 0; transform: translateY(20px) scale(0.97); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
         }
 
         header {
-            padding: 18px 24px;
-            background: rgba(8, 14, 28, 0.85);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 18px 28px;
+            background: rgba(6, 10, 22, 0.85);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -183,31 +190,27 @@ HTML_TEMPLATE = """
             background: linear-gradient(90deg, #00f2fe, #4facfe, #00ffaa);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            animation: glowText 3s infinite alternate;
         }
+
+        @keyframes glowText {
+            0% { filter: drop-shadow(0 0 2px rgba(0, 242, 254, 0.2)); }
+            100% { filter: drop-shadow(0 0 10px rgba(0, 255, 170, 0.6)); }
+        }
+
         header .user-info {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
 
-        /* 디스코드 프로필 아바타 이미지 스타일 */
         .avatar-img {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             border: 2px solid #00ffaa;
             object-fit: cover;
-        }
-        .avatar-placeholder {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #5865F2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: bold;
+            box-shadow: 0 0 10px rgba(0, 255, 170, 0.4);
         }
 
         header .logout-btn {
@@ -215,79 +218,59 @@ HTML_TEMPLATE = """
             color: #8a99ad;
             text-decoration: none;
             font-size: 12px;
-            padding: 6px 12px;
+            padding: 6px 14px;
             border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 6px;
-            transition: 0.3s;
+            border-radius: 8px;
+            transition: all 0.3s ease;
         }
         header .logout-btn:hover {
             color: #fff;
             border-color: #00ffaa;
+            box-shadow: 0 0 12px rgba(0, 255, 170, 0.3);
+            background: rgba(0, 255, 170, 0.1);
         }
 
+        /* 로그인 박스 및 반응형 디자인 */
         .login-box {
-            padding: 40px 20px;
+            padding: 50px 24px;
             text-align: center;
             margin: auto;
-            max-width: 380px;
+            max-width: 360px;
             width: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            animation: fadeIn 0.6s ease;
         }
-        .login-box input[type="password"] {
-            font-family: 'Pretendard', sans-serif;
-            width: 100%;
-            padding: 12px 16px;
-            margin-top: 15px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            color: #fff;
-            font-size: 15px;
-            outline: none;
-            text-align: center;
-        }
-        .login-box input[type="password"]:focus {
-            border-color: #00ffaa;
-            box-shadow: 0 0 10px rgba(0, 255, 170, 0.3);
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .discord-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 12px;
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             background: #5865F2;
             color: white;
             text-decoration: none;
-            border-radius: 8px;
+            border-radius: 12px;
             font-family: 'Pretendard', sans-serif;
             font-weight: bold;
-            font-size: 14px;
-            transition: background 0.2s, transform 0.2s;
-            margin-bottom: 20px;
+            font-size: 15px;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
         }
         .discord-btn:hover {
             background: #4752C4;
-            transform: translateY(-2px);
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 25px rgba(88, 101, 242, 0.6);
         }
-
-        .divider {
-            display: flex;
-            align-items: center;
-            text-align: center;
-            color: #5865f2;
-            margin: 15px 0;
-            font-size: 12px;
-            font-family: 'Pretendard', sans-serif;
-        }
-        .divider::before, .divider::after {
-            content: '';
-            flex: 1;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .divider:not(:empty)::before { margin-right: .5em; }
-        .divider:not(:empty)::after { margin-left: .5em; }
 
         .dashboard {
             display: flex;
@@ -296,27 +279,28 @@ HTML_TEMPLATE = """
         }
         .sidebar {
             width: 280px;
-            background: rgba(0, 0, 0, 0.25);
+            background: rgba(0, 0, 0, 0.3);
             border-right: 1px solid rgba(255, 255, 255, 0.08);
-            padding: 20px 12px;
+            padding: 24px 14px;
             overflow-y: auto;
         }
         .sidebar h2 {
-            font-size: 12px;
-            color: #7f8c8d;
-            letter-spacing: 1px;
-            margin-bottom: 16px;
+            font-size: 11px;
+            color: #00ffaa;
+            letter-spacing: 1.5px;
+            margin-bottom: 20px;
             padding-left: 8px;
+            text-transform: uppercase;
         }
 
         .aurora-btn-wrapper {
             position: relative;
-            margin-bottom: 10px;
-            border-radius: 12px;
+            margin-bottom: 12px;
+            border-radius: 14px;
             overflow: hidden;
             padding: 2px;
-            background: rgba(255, 255, 255, 0.05);
-            transition: transform 0.2s ease, box-shadow 0.3s ease;
+            background: rgba(255, 255, 255, 0.03);
+            transition: transform 0.25s ease, box-shadow 0.3s ease;
         }
 
         .aurora-btn-wrapper::before {
@@ -334,7 +318,7 @@ HTML_TEMPLATE = """
                 #ff0080 75%,
                 transparent 100%
             );
-            animation: rotateAurora 3.5s linear infinite;
+            animation: rotateAurora 4s linear infinite;
             opacity: 0;
             transition: opacity 0.3s ease;
         }
@@ -342,7 +326,7 @@ HTML_TEMPLATE = """
         .aurora-btn-wrapper:hover::before { opacity: 1; }
         .aurora-btn-wrapper:hover {
             transform: translateY(-2px);
-            box-shadow: 0 0 18px rgba(255, 0, 128, 0.35);
+            box-shadow: 0 4px 20px rgba(255, 0, 128, 0.3);
         }
 
         .aurora-btn-wrapper.active::before {
@@ -355,10 +339,10 @@ HTML_TEMPLATE = """
                 #0051ff 75%,
                 #00ffaa 100%
             ) !important;
-            animation: rotateAurora 2.5s linear infinite !important;
+            animation: rotateAurora 2s linear infinite !important;
         }
         .aurora-btn-wrapper.active {
-            box-shadow: 0 0 22px rgba(0, 255, 170, 0.45);
+            box-shadow: 0 0 25px rgba(0, 255, 170, 0.4);
         }
 
         .item-btn {
@@ -366,11 +350,11 @@ HTML_TEMPLATE = """
             z-index: 1;
             width: 100%;
             text-align: left;
-            padding: 12px 16px;
-            background: rgba(12, 18, 36, 0.95);
+            padding: 14px 18px;
+            background: rgba(10, 16, 32, 0.95);
             border: none;
             color: #8a99ad;
-            border-radius: 10px;
+            border-radius: 12px;
             cursor: pointer;
             font-size: 14px;
             transition: color 0.2s, background 0.2s;
@@ -381,7 +365,7 @@ HTML_TEMPLATE = """
         .aurora-btn-wrapper.active .item-btn {
             color: #00ffaa;
             font-weight: bold;
-            background: rgba(8, 28, 42, 0.95);
+            background: rgba(6, 24, 38, 0.95);
         }
 
         @keyframes rotateAurora {
@@ -391,60 +375,66 @@ HTML_TEMPLATE = """
 
         .main-content {
             flex: 1;
-            padding: 30px;
+            padding: 36px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
         }
         .doc-title {
-            font-size: 20px;
-            margin-bottom: 18px;
+            font-size: 22px;
+            margin-bottom: 20px;
             color: #ffffff;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 14px;
             letter-spacing: 0.5px;
         }
         .doc-body {
             font-family: 'Pretendard', sans-serif;
             font-weight: 500;
             font-size: 15px;
-            line-height: 1.8;
-            color: #e2e8f0;
+            line-height: 1.85;
+            color: #cbd5e1;
             white-space: pre-wrap;
             flex: 1;
+            animation: contentFade 0.4s ease-out;
         }
 
-        /* 📱 모바일 반응형 디자인 최적화 */
+        @keyframes contentFade {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 📱 모바일 반응형 디자인 */
         @media (max-width: 768px) {
             .container {
                 width: 95%;
                 height: 94vh;
-                border-radius: 14px;
+                border-radius: 16px;
             }
             header {
-                padding: 14px 16px;
+                padding: 14px 18px;
             }
             header h1 {
                 font-size: 16px;
             }
             .user-info span {
-                display: none; /* 모바일에서 긴 이름 생략 */
+                display: none;
             }
             .dashboard {
                 flex-direction: column;
             }
             .sidebar {
                 width: 100%;
-                max-height: 140px;
+                max-height: 150px;
                 border-right: none;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.08);
                 padding: 12px;
             }
             .main-content {
-                padding: 18px;
+                padding: 20px;
             }
             .doc-title {
-                font-size: 17px;
+                font-size: 18px;
             }
             .doc-body {
                 font-size: 14px;
@@ -452,7 +442,7 @@ HTML_TEMPLATE = """
         }
     </style>
     <script>
-        // 🔒 강력한 보안 차단 메커니즘 (우클릭, 선택, 드래그 원천 차단)
+        // 🔒 우클릭, 드래그, 선택 완벽 차단
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('selectstart', e => e.preventDefault());
         document.addEventListener('dragstart', e => e.preventDefault());
@@ -467,24 +457,31 @@ HTML_TEMPLATE = """
             if (overlay) overlay.style.display = 'none';
         }
 
-        // 🔒 단축키 기반 탈취 시도 차단 (F12, Ctrl+C/V/U/S/P/A, PrintScreen, Shift+S 등)
+        // 🔒 Windows + Shift + S 선제 차단 (키 감지 즉시 화면 가림)
         document.addEventListener('keydown', function(e) {
             const k = e.key.toLowerCase();
+            
+            // Windows키, Shift키, Control키, PrintScreen 단독 또는 조합 감지 즉시 차단
             if (
-                e.key === 'PrintScreen' ||
-                e.keyCode === 44 ||
+                e.key === 'Meta' || e.key === 'Win' || 
+                e.key === 'PrintScreen' || e.keyCode === 44 ||
                 e.key === 'F12' ||
                 (e.ctrlKey && ['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k)) ||
                 (e.metaKey && ['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k)) ||
                 (e.shiftKey && (e.key === 'S' || e.key === 's'))
             ) {
-                e.preventDefault();
-                e.stopPropagation();
                 triggerSecurityLock();
+            }
+        }, true);
+
+        // 키를 뗄 때 락업 해제
+        document.addEventListener('keyup', function(e) {
+            if (e.key === 'Meta' || e.key === 'Win' || e.key === 'Shift') {
+                setTimeout(releaseSecurityLock, 500);
             }
         });
 
-        // 🔒 창 이탈 / 화면 캡처 프로그램 호출 / 화면 전환 시 즉시 락업
+        // 🔒 창 포커스 이탈 / 캡처 툴 실행 / 모바일 앱 전환 시 락업
         window.addEventListener('blur', triggerSecurityLock);
         window.addEventListener('focus', releaseSecurityLock);
         document.addEventListener('visibilitychange', function() {
@@ -496,6 +493,13 @@ HTML_TEMPLATE = """
         });
         window.addEventListener('pagehide', triggerSecurityLock);
 
+        // 마우스가 화면 상단(캡처 툴 영역)으로 이탈 시 선제 가림
+        document.addEventListener('mouseleave', function(e) {
+            if (e.clientY <= 0) {
+                triggerSecurityLock();
+            }
+        });
+
         function selectManual(btnElement) {
             document.querySelectorAll('.aurora-btn-wrapper').forEach(w => w.classList.remove('active'));
             const wrapper = btnElement.closest('.aurora-btn-wrapper');
@@ -504,13 +508,21 @@ HTML_TEMPLATE = """
             const title = btnElement.getAttribute('data-title');
             const content = btnElement.getAttribute('data-content');
             
-            document.getElementById('doc-title').innerText = title;
-            document.getElementById('doc-body').innerText = content;
+            const titleEl = document.getElementById('doc-title');
+            const bodyEl = document.getElementById('doc-body');
+
+            titleEl.innerText = title;
+            bodyEl.innerText = content;
+
+            // 애니메이션 재발동
+            bodyEl.style.animation = 'none';
+            bodyEl.offsetHeight; // trigger reflow
+            bodyEl.style.animation = 'contentFade 0.4s ease-out';
         }
     </script>
 </head>
 <body>
-    <!-- 🔒 무단 탈취 경고 오버레이 -->
+    <!-- 🔒 무단 캡처 및 복제 경고 오버레이 -->
     <div id="security-overlay">
         <div class="alert-icon">⚠️</div>
         <div class="alert-main-text">보안 경고: 무단 캡처 및 복제 금지</div>
@@ -529,8 +541,6 @@ HTML_TEMPLATE = """
                 <div class="user-info">
                     {% if avatar_url %}
                         <img src="{{ avatar_url }}" alt="Avatar" class="avatar-img">
-                    {% else %}
-                        <div class="avatar-placeholder">👤</div>
                     {% endif %}
                     <span style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard';">
                         {{ username }}
@@ -542,32 +552,23 @@ HTML_TEMPLATE = """
 
         {% if not authenticated %}
             <div class="login-box">
-                <h2 style="font-size: 18px; color: #e2e8f0; margin-bottom: 20px;">🔒 스태프 인증</h2>
+                <h2 style="font-size: 18px; color: #e2e8f0; margin-bottom: 24px; font-family: 'GmarketSansBold';">🔒 스태프 인증</h2>
                 
+                {% if error %}
+                    <div style="color:#ff5555; margin-bottom:15px; font-family: 'Pretendard'; font-size:13px;">{{ error }}</div>
+                {% endif %}
+
                 <a href="/login/discord" class="discord-btn">
-                    <svg width="20" height="15" viewBox="0 0 127.14 96.36" fill="currentColor">
+                    <svg width="22" height="17" viewBox="0 0 127.14 96.36" fill="currentColor">
                         <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1,105.25,105.25,0,0,0,32.19-16.14c2.64-27.38-4.51-51.11-18.91-72.15ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.87,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.1,53,91.08,65.69,84.69,65.69Z"/>
                     </svg>
                     Discord 계정으로 로그인
                 </a>
-
-                <div class="divider">OR</div>
-
-                {% if error %}
-                    <div class="alert-error" style="color:#ff5555; margin-top:10px; font-family: 'Pretendard'; font-size:13px;">{{ error }}</div>
-                {% endif %}
-
-                <form method="POST" action="/login">
-                    <input type="password" name="auth_code" placeholder="인증코드 입력" required autocomplete="off">
-                    <div class="aurora-btn-wrapper active" style="margin-top: 18px;">
-                        <button type="submit" class="item-btn" style="text-align: center; font-family: 'GmarketSansBold'; font-size: 15px;">인증코드로 로그인</button>
-                    </div>
-                </form>
             </div>
         {% else %}
             <div class="dashboard">
                 <div class="sidebar">
-                    <h2>MANUAL LIST</h2>
+                    <h2>Manual List</h2>
                     {% for item in manuals %}
                         <div class="aurora-btn-wrapper {% if loop.first %}active{% endif %}">
                             <button id="btn-{{ item.id }}" 
@@ -589,6 +590,7 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
+        // 🌌 오로라 Canvas 애니메이션 강화
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
 
@@ -599,12 +601,12 @@ HTML_TEMPLATE = """
         window.addEventListener('resize', resize);
         resize();
 
-        const stars = Array.from({ length: 120 }, () => ({
+        const stars = Array.from({ length: 150 }, () => ({
             x: Math.random() * canvas.width,
             y: Math.random() * canvas.height,
-            size: Math.random() * 1.8,
+            size: Math.random() * 2,
             alpha: Math.random(),
-            speed: Math.random() * 0.01 + 0.005
+            speed: Math.random() * 0.015 + 0.005
         }));
 
         let tick = 0;
@@ -613,26 +615,26 @@ HTML_TEMPLATE = """
             ctx.save();
             ctx.beginPath();
             
-            const startY = yOffset + Math.sin(tick * speedMult) * 20;
+            const startY = yOffset + Math.sin(tick * speedMult) * 25;
             ctx.moveTo(0, startY);
 
-            for (let x = 0; x <= canvas.width; x += 30) {
+            for (let x = 0; x <= canvas.width; x += 25) {
                 const y = yOffset + 
-                          Math.sin(x * 0.002 + tick * speedMult) * waveHeight + 
-                          Math.cos(x * 0.001 + tick * 0.5) * (waveHeight * 0.5);
+                          Math.sin(x * 0.0025 + tick * speedMult) * waveHeight + 
+                          Math.cos(x * 0.0012 + tick * 0.6) * (waveHeight * 0.6);
                 ctx.lineTo(x, y);
             }
 
-            ctx.lineTo(canvas.width, startY + 180);
-            ctx.lineTo(0, startY + 180);
+            ctx.lineTo(canvas.width, startY + 220);
+            ctx.lineTo(0, startY + 220);
             ctx.closePath();
 
-            const grad = ctx.createLinearGradient(0, yOffset - 50, canvas.width, yOffset + 200);
+            const grad = ctx.createLinearGradient(0, yOffset - 50, canvas.width, yOffset + 250);
             grad.addColorStop(0, color1);
             grad.addColorStop(1, color2);
 
             ctx.fillStyle = grad;
-            ctx.filter = 'blur(20px)';
+            ctx.filter = 'blur(25px)';
             ctx.fill();
             ctx.restore();
         }
@@ -649,22 +651,22 @@ HTML_TEMPLATE = """
                 ctx.fill();
             });
 
-            tick += 0.012;
+            tick += 0.015;
 
             drawRibbonAurora(
-                canvas.height * 0.08, 
-                60, 
-                'rgba(0, 255, 170, 0.35)', 
+                canvas.height * 0.06, 
+                70, 
+                'rgba(0, 255, 170, 0.4)', 
                 'rgba(0, 150, 255, 0.05)', 
-                0.8
+                0.9
             );
 
             drawRibbonAurora(
-                canvas.height * 0.12, 
-                80, 
-                'rgba(0, 180, 255, 0.25)', 
-                'rgba(140, 0, 255, 0.02)', 
-                1.2
+                canvas.height * 0.10, 
+                90, 
+                'rgba(0, 180, 255, 0.3)', 
+                'rgba(140, 0, 255, 0.03)', 
+                1.3
             );
 
             requestAnimationFrame(animate);
@@ -732,7 +734,6 @@ def callback():
     username = user_data.get('global_name') or user_data.get('username', 'Unknown')
     avatar_hash = user_data.get('avatar')
     
-    # 디스코드 아바타 URL 생성 (프로필 사진 존재 여부 확인)
     avatar_url = None
     if avatar_hash:
         avatar_url = f"https://cdn.discordapp.com/avatars/{discord_id}/{avatar_hash}.png"
@@ -760,44 +761,10 @@ def callback():
     
     return redirect(url_for('index'))
 
-@app.route('/login', methods=['POST'])
-def login():
-    entered_code = request.form.get('auth_code')
-    
-    user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if user_ip and ',' in user_ip:
-        user_ip = user_ip.split(',')[0].strip()
-        
-    location_info = get_location_from_ip(user_ip)
-    now_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    ACCESS_LOGS.insert(0, {
-        "discord_id": "CODE_AUTH",
-        "user": "인증코드 접속",
-        "ip": user_ip,
-        "location": location_info,
-        "time": now_time,
-        "type": "Auth Code"
-    })
-
-    if entered_code == VALID_AUTH_CODE:
-        session['authenticated'] = True
-        session['discord_id'] = "SYSTEM"
-        session['username'] = "스태프(코드인증)"
-        session['avatar_url'] = None
-        return redirect(url_for('index'))
-    else:
-        return render_template_string(
-            HTML_TEMPLATE, 
-            authenticated=False, 
-            error="❌ 인증코드가 올바르지 않습니다.",
-            manuals=MANUALS
-        )
-
 @app.route('/admin/logs')
 def admin_logs():
     discord_id = session.get('discord_id')
-    if discord_id != OWNER_DISCORD_ID and discord_id != "SYSTEM":
+    if discord_id != OWNER_DISCORD_ID:
         return jsonify({"error": "Unauthorized"}), 403
     return jsonify(ACCESS_LOGS)
 
