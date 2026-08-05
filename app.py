@@ -446,10 +446,11 @@ MAIN_HTML_TEMPLATE = """
                 if (res.status === 403) {
                     const errData = await res.json();
                     document.getElementById('login-box').style.display = 'none';
+                    document.getElementById('main-dashboard').style.display = 'none';
                     document.getElementById('access-denied-box').style.display = 'block';
                     if (errData.reason === 'blacklisted') {
                         document.getElementById('denied-title').innerText = "⚠️ 접근 차단 (BLACK LIST)";
-                        document.getElementById('denied-desc').innerText = "귀하의 계정은 차단되어 접근할 수 없습니다.";
+                        document.getElementById('denied-desc').innerText = "귀하의 계정은 블랙리스트로 등록되어 시스템 접근이 차단되었습니다.";
                     } else {
                         document.getElementById('denied-title').innerText = "🔒 접근 승인 대기 중";
                         document.getElementById('denied-desc').innerText = "화이트리스트에 등록되지 않은 계정입니다. 관리자에게 승인을 요청하세요.";
@@ -783,8 +784,10 @@ def callback():
     if not code:
         return redirect(url_for('index'))
 
-    redirect_uri = request.host_url.rstrip('/') + '/callback'
+    # 스키마(https/http) 포함 정확한 Redirect URI 구성
+    redirect_uri = url_for('callback', _external=True)
     token_url = 'https://discord.com/api/oauth2/token'
+    
     data = {
         'client_id': CLIENT_ID,
         'client_secret': CLIENT_SECRET,
@@ -805,14 +808,15 @@ def callback():
         user_res = requests.get('https://discord.com/api/users/@me', headers={'Authorization': f'Bearer {access_token}'}, timeout=5)
         user_data = user_res.json()
 
-        session['user'] = user_data
-        session.permanent = True
+        if 'id' in user_data:
+            session['user'] = user_data
+            session.permanent = True
 
-        # 접속 로그 기록
-        db = load_data()
-        user_name = user_data.get('global_name') or user_data.get('username')
-        add_log(db, "AUTH", user_name, "시스템 로그인")
-        save_data(db)
+            # 접속 로그 기록
+            db = load_data()
+            user_name = user_data.get('global_name') or user_data.get('username')
+            add_log(db, "AUTH", user_name, "시스템 로그인")
+            save_data(db)
 
     except Exception as e:
         print(f"[Auth Error] {e}")
@@ -833,7 +837,7 @@ def api_state():
     db = load_data()
     user_id = str(user['id'])
 
-    # 블랙리스트 검증
+    # 블랙리스트 검증 (화이트리스트보다 블랙리스트 우선 적용)
     if user_id in [str(b) for b in db.get('user_blacklist', [])]:
         return jsonify({'error': 'Forbidden', 'reason': 'blacklisted'}), 403
 
@@ -869,7 +873,6 @@ def api_user_lookup():
     if not query: 
         return jsonify({'error': 'Query required'}), 400
 
-    # 1. 숫자로 된 사용자 ID 파싱 시도
     if query.isdigit():
         if BOT_TOKEN:
             try:
@@ -964,7 +967,6 @@ def api_permission_apply():
 
     user_name = user.get('global_name') or user.get('username')
 
-    # 리스트 데이터 정제 (모두 문자열로 통일)
     db['user_whitelist'] = [str(x) for x in db.get('user_whitelist', [])]
     db['admin_whitelist'] = [str(x) for x in db.get('admin_whitelist', [])]
     db['user_blacklist'] = [str(x) for x in db.get('user_blacklist', [])]
