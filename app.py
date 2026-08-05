@@ -2,43 +2,34 @@ import os
 import json
 import base64
 import datetime
-from flask import Flask, request, render_template_string, redirect, session, jsonify, url_for
+import random
+from flask import Flask, request, render_template_string, redirect, session, jsonify
 import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
-
-# Reverse Proxy 환경 대응
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-
-# ==========================================
-# ⚙️ 쿠키 및 세션 보안 설정 (무한 로그인 방지)
-# ==========================================
-app.secret_key = os.environ.get("SECRET_KEY", "sky_aurora_super_secret_key_2026")
-app.config['SESSION_COOKIE_NAME'] = 'sky_aurora_session'
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False  # HTTP/HTTPS 환경 유연 대응
-app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+app.secret_key = os.urandom(24)
 
 # ==========================================
-# ⚙️ 설정 및 환경 변수 (보안을 위해 환경 변수 처리)
+# ⚙️ 설정 및 환경 변수
 # ==========================================
 CLIENT_ID = "1534184089144266872"
-CLIENT_SECRET = "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm"
-BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
+CLIENT_SECRET = "JcMp7ntF3Rx32ZYTRjyaYUWfmp0EU3co"
+BASE_URL = "https://sky-aurora-staff.onrender.com"
 
+ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
 DATA_FILE = "sky_aurora_admin_data.json"
 DEFAULT_ADMINS = ["1534184089144266872", "843621337066504225"]
 
-# 깃허브 토큰과 레포지토리는 환경 변수에서 안전하게 불러옵니다.
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-GITHUB_REPO = "itx-0622/sky-aurora-staff"
+# GitHub 영구 저장 환경변수
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_REPO = os.environ.get("GITHUB_REPO")
 
 # --------------------------------------------------
-# 📁 데이터 저장/불러오기
+# 📁 데이터 불러오기 및 영구 저장 로직
 # --------------------------------------------------
 def load_data():
-    data = None
     if GITHUB_TOKEN and GITHUB_REPO:
         try:
             url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
@@ -48,36 +39,39 @@ def load_data():
                 content = res.json()["content"]
                 decoded_data = base64.b64decode(content).decode('utf-8')
                 data = json.loads(decoded_data)
+                for admin_id in DEFAULT_ADMINS:
+                    if admin_id not in data.get("admin_whitelist", []):
+                        data.setdefault("admin_whitelist", []).append(admin_id)
+                return data
         except Exception as e:
             print(f"[GitHub Sync Load Error] {e}")
 
-    if not data and os.path.exists(DATA_FILE):
+    if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+                for admin_id in DEFAULT_ADMINS:
+                    if admin_id not in data.get("admin_whitelist", []):
+                        data.setdefault("admin_whitelist", []).append(admin_id)
+                return data
         except Exception:
             pass
 
-    if not data:
-        data = {
-            "admin_whitelist": DEFAULT_ADMINS,
-            "manuals": [
-                {
-                    "id": 1,
-                    "category": "보안 지침",
-                    "pinned": True,
-                    "title": "01. 기본 보안 규칙",
-                    "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다."
-                }
-            ],
-            "logs": []
-        }
-
-    for admin_id in DEFAULT_ADMINS:
-        if str(admin_id) not in [str(a) for a in data.get("admin_whitelist", [])]:
-            data.setdefault("admin_whitelist", []).append(str(admin_id))
-
-    return data
+    return {
+        "admin_whitelist": DEFAULT_ADMINS,
+        "user_whitelist": [],
+        "user_blacklist": [],
+        "manuals": [
+            {
+                "id": 1,
+                "category": "보안 지침",
+                "pinned": True,
+                "title": "01. 기본 보안 규칙",
+                "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템 화면 캡처 및 무단 촬영 금지\n2. 계정 타인 공유 금지\n3. 접속 IP 및 접근 기록 실시간 로깅 중"
+            }
+        ],
+        "logs": []
+    }
 
 def save_data(data):
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
@@ -94,7 +88,7 @@ def save_data(data):
             encoded_content = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
             
             payload = {
-                "message": f"Auto-sync data [{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
+                "message": f"Auto-sync manual data [{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
                 "content": encoded_content
             }
             if sha:
@@ -119,7 +113,7 @@ MAIN_HTML_TEMPLATE = """
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>SKY AURORA STAFF MANUAL</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
     <style>
@@ -130,7 +124,7 @@ MAIN_HTML_TEMPLATE = """
         }
         * {
             box-sizing: border-box; margin: 0; padding: 0;
-            -webkit-user-select: none !important; user-select: none !important;
+            -webkit-user-select: none !important; -moz-user-select: none !important; -ms-user-select: none !important; user-select: none !important;
             -webkit-touch-callout: none !important; -webkit-tap-highlight-color: transparent;
         }
         body {
@@ -148,18 +142,25 @@ MAIN_HTML_TEMPLATE = """
         .alert-sub-text { font-size: 14px; color: #a0aec0; font-family: 'Pretendard', sans-serif; }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
+        /* 🚀 인트로 로딩 화면 스타일 */
         #intro-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: #030509; z-index: 99999; display: flex; flex-direction: column;
             justify-content: center; align-items: center; opacity: 1; transition: opacity 0.8s ease;
         }
-        .intro-circle-container { position: relative; width: 140px; height: 140px; display: flex; justify-content: center; align-items: center; margin-bottom: 24px; }
+        .intro-circle-container {
+            position: relative; width: 140px; height: 140px; display: flex;
+            justify-content: center; align-items: center; margin-bottom: 24px;
+        }
         .intro-ring {
             position: absolute; width: 100%; height: 100%; border-radius: 50%;
             border: 2px solid transparent; border-top-color: #00ffaa; border-right-color: #00f2fe;
             animation: spinRing 1s linear infinite; opacity: 0.5; transition: all 0.5s ease;
         }
-        .intro-ring.expand { transform: scale(1.3); border-width: 4px; border-color: #00ffaa; box-shadow: 0 0 25px #00ffaa, inset 0 0 15px #00ffaa; opacity: 1; }
+        .intro-ring.expand {
+            transform: scale(1.3); border-width: 4px; border-color: #00ffaa;
+            box-shadow: 0 0 25px #00ffaa, inset 0 0 15px #00ffaa; opacity: 1;
+        }
         @keyframes spinRing { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
         .intro-avatar {
@@ -180,6 +181,7 @@ MAIN_HTML_TEMPLATE = """
             border-radius: 24px; box-shadow: 0 0 60px rgba(0, 255, 170, 0.12);
             display: flex; flex-direction: column; overflow: hidden; animation: containerAppear 0.8s ease;
         }
+        @keyframes containerAppear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
         header { padding: 16px 24px; background: rgba(5, 8, 18, 0.95); border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; }
         header h1 { font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
@@ -191,11 +193,13 @@ MAIN_HTML_TEMPLATE = """
         .logout-btn { font-family: 'Pretendard', sans-serif; color: #8a99ad; text-decoration: none; font-size: 12px; padding: 5px 12px; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; }
         .logout-btn:hover { color: #fff; border-color: #00ffaa; background: rgba(0, 255, 170, 0.1); }
 
-        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 420px; width: 90%; background: rgba(13, 20, 38, 0.85); border: 1px solid rgba(0, 255, 170, 0.25); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
+        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; background: rgba(13, 20, 38, 0.85); border: 1px solid rgba(0, 255, 170, 0.25); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
         .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
         .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5); }
 
         .dashboard { display: flex; flex: 1; overflow: hidden; }
+        
+        /* 📱 반응형 레이아웃 설정 */
         .sidebar { width: 300px; background: rgba(0, 0, 0, 0.4); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 20px 14px; overflow-y: auto; }
         .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1px; margin: 16px 0 8px 8px; text-transform: uppercase; font-family: 'Pretendard'; font-weight: bold; }
         
@@ -203,6 +207,7 @@ MAIN_HTML_TEMPLATE = """
         .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); box-shadow: 0 0 15px rgba(0, 255, 170, 0.4); }
         .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: rgba(10, 16, 32, 0.95); border: none; color: #8a99ad; border-radius: 10px; cursor: pointer; font-size: 13px; font-family: 'Pretendard', sans-serif; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
         .aurora-btn-wrapper.active .item-btn { color: #ffffff; background: rgba(6, 24, 38, 0.95); font-weight: bold; }
+        .pin-badge { font-size: 11px; margin-right: 4px; }
 
         .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; }
         .content-card { background: rgba(5, 8, 17, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -212,24 +217,22 @@ MAIN_HTML_TEMPLATE = """
         .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: #cbd5e1; white-space: pre-wrap; background: rgba(0, 0, 0, 0.3); padding: 20px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.05); }
 
         input, textarea, select { width: 100%; background: rgba(3, 5, 9, 0.8); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.12); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; }
-        input:focus, textarea:focus, select:focus { border-color: #00ffaa; box-shadow: 0 0 12px rgba(0, 255, 170, 0.3); }
-        .btn-ui { background: linear-gradient(135deg, #00f2fe, #00ffaa); color: #030509; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif; transition: all 0.2s ease; }
-        .btn-ui:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(0, 255, 170, 0.4); }
-        .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; }
-        .btn-secondary { background: linear-gradient(135deg, #475569, #334155); color: white; }
+        input:focus, textarea:focus { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
+        .btn-ui { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif; transition: all 0.2s ease; }
+        .btn-ui:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+        .btn-secondary { background: linear-gradient(135deg, #475569, #334155); }
 
         ul.data-list { list-style: none; padding: 0; }
         ul.data-list li { background: rgba(10, 16, 32, 0.7); padding: 12px 14px; margin-bottom: 8px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
 
+        /* 🎬 부드러운 탭 애니메이션 */
         .tab-enter { animation: manualEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .tab-leave { animation: manualLeave 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
         @keyframes manualEnter { 0% { opacity: 0; transform: translateY(20px) scale(0.98); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes manualLeave { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-15px) scale(0.98); } }
 
-        .user-preview-card {
-            display: flex; align-items: center; gap: 14px; background: rgba(0, 255, 170, 0.05);
-            border: 1px solid rgba(0, 255, 170, 0.2); padding: 12px 16px; border-radius: 12px; margin-bottom: 14px;
-        }
-        .user-preview-avatar { width: 48px; height: 48px; border-radius: 50%; border: 2px solid #00ffaa; }
-
+        /* 📱 모바일 UI 완벽 대응 CSS */
         @media (max-width: 768px) {
             .container { width: 100%; height: 100vh; border-radius: 0; border: none; }
             .dashboard { flex-direction: column; }
@@ -237,6 +240,8 @@ MAIN_HTML_TEMPLATE = """
             .main-content { padding: 16px; }
             header { padding: 12px 16px; }
             header h1 { font-size: 15px; }
+            .doc-title { font-size: 17px; }
+            .doc-body { font-size: 14px; padding: 14px; }
         }
     </style>
     <script>
@@ -259,7 +264,7 @@ MAIN_HTML_TEMPLATE = """
 
         function login() {
             const redirectUri = encodeURIComponent(window.location.origin + '/callback');
-            location.href = `https://discord.com/oauth2/authorize?client_id={{ CLIENT_ID }}&response_type=code&redirect_uri=${redirectUri}&scope=identify`;
+            location.href = `https://discord.com/oauth2/authorize?client_id=__CLIENT_ID__&response_type=code&redirect_uri=${redirectUri}&scope=identify`;
         }
     </script>
 </head>
@@ -270,6 +275,7 @@ MAIN_HTML_TEMPLATE = """
         <div class="alert-sub-text">시스템 정보의 무단 촬영 및 복제 시도는 금지되어 있습니다.</div>
     </div>
 
+    <!-- 🚀 인트로 로딩 커스텀 레이어 -->
     <div id="intro-overlay" style="display:none;">
         <div class="intro-circle-container">
             <div id="intro-ring" class="intro-ring"></div>
@@ -295,7 +301,7 @@ MAIN_HTML_TEMPLATE = """
         <div id="login-box" class="login-box">
             <h2 style="font-size: 18px; color: #e2e8f0; margin-bottom: 24px; font-family: 'GmarketSansBold';">🔒 스태프 시스템 인증</h2>
             <button onclick="login()" class="discord-btn">
-                디스코드 계정으로 로그인
+                디스코드 계정으로 통합 로그인
             </button>
         </div>
 
@@ -306,10 +312,10 @@ MAIN_HTML_TEMPLATE = """
                 <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
                     <div class="sidebar-category-title" style="color:#38bdf8;">Admin Controls</div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-m-manage">
-                        <button class="item-btn" onclick="switchAdminTab('m-manage')">📖 매뉴얼 등록/수정</button>
+                        <button class="item-btn" onclick="switchAdminTab('m-manage')">📖 매뉴얼 등록/관리</button>
                     </div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-permissions">
-                        <button class="item-btn" onclick="switchAdminTab('permissions')">🛡️ 어드민 권한 관리</button>
+                        <button class="item-btn" onclick="switchAdminTab('permissions')">🛡️ 권한 제어 센터</button>
                     </div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-logs">
                         <button class="item-btn" onclick="switchAdminTab('logs')">📜 실시간 접속 로그</button>
@@ -324,54 +330,47 @@ MAIN_HTML_TEMPLATE = """
                 </div>
 
                 <div id="view-admin-m-manage" class="tab-enter" style="display:none;">
-                    <div class="doc-title">매뉴얼 작성 및 수정</div>
+                    <div class="doc-title">매뉴얼 신규 등록 및 작성</div>
                     <div class="content-card">
                         <div style="display:flex; gap:10px; margin-bottom:4px;">
-                            <input type="text" id="m-edit-category" placeholder="카테고리 예: 운항 지침, 공통 매뉴얼" style="flex:2;">
+                            <input type="text" id="m-edit-category" placeholder="주제(카테고리) 예: 운항 지침, 공통 매뉴얼" style="flex:2;">
                             <label style="display:flex; align-items:center; gap:6px; font-family:'Pretendard'; font-size:13px; color:#00ffaa; cursor:pointer; padding-bottom:12px;">
                                 <input type="checkbox" id="m-edit-pinned" style="width:auto; margin:0;"> 📌 상단 고정
                             </label>
                         </div>
                         <input type="text" id="m-edit-title" placeholder="매뉴얼 제목을 입력하세요">
-                        <textarea id="m-edit-content" style="height:220px;" placeholder="매뉴얼 상세 내용을 입력하세요"></textarea>
+                        <textarea id="m-edit-content" style="height:240px;" placeholder="매뉴얼 상세 내용을 입력하세요"></textarea>
                         <div style="display:flex; gap:10px;">
-                            <button onclick="saveManualData()" class="btn-ui" style="flex:1;">💾 선택된 매뉴얼 저장/수정</button>
-                            <button onclick="deleteManualData()" class="btn-ui btn-danger" style="width:110px;">🗑️ 삭제</button>
-                            <button onclick="resetManualForm()" class="btn-ui btn-secondary" style="width:110px;">새 매뉴얼</button>
+                            <button onclick="saveManualData()" class="btn-ui" style="flex:1;">💾 매뉴얼 저장/수정</button>
+                            <button onclick="deleteManualData()" class="btn-ui btn-danger" style="width:100px;">🗑️ 삭제</button>
+                            <button onclick="resetManualForm()" class="btn-ui btn-secondary" style="width:100px;">새로작성</button>
                         </div>
                     </div>
                 </div>
 
                 <div id="view-admin-permissions" class="tab-enter" style="display:none;">
-                    <div class="doc-title">어드민 권한 업그레이드 및 관리</div>
+                    <div class="doc-title">스태프 접근 권한 관리</div>
                     <div class="content-card" style="margin-bottom:20px;">
-                        <div style="display:flex; gap:10px; margin-bottom:12px;">
-                            <input type="text" id="perm-search-input" placeholder="조회할 디스코드 ID 또는 @사용자명 입력" style="margin:0; flex:1;">
-                            <button onclick="searchUser()" class="btn-ui" style="width:120px;">🔍 사용자 조회</button>
-                        </div>
-
-                        <div id="user-search-result" class="user-preview-card" style="display:none;">
-                            <img id="preview-avatar" class="user-preview-avatar" src="" alt="Avatar">
-                            <div>
-                                <div id="preview-global-name" style="font-size:16px; font-weight:bold; color:#00ffaa;">-</div>
-                                <div id="preview-username" style="font-size:13px; color:#a0aec0; font-family:'Pretendard';">-</div>
-                                <div id="preview-id" style="font-size:11px; color:#64748b; font-family:monospace;">ID: -</div>
-                            </div>
-                        </div>
-
                         <div style="display:flex; gap:10px;">
-                            <button onclick="applyAdminUpgrade()" class="btn-ui" style="flex:1;">⚡ 해당 사용자 어드민(ADMIN)으로 업그레이드</button>
+                            <input type="text" id="perm-target-id" placeholder="대상 디스코드 유저 ID 입력" style="margin:0;">
+                            <button onclick="updatePermission('whitelist', 'add')" class="btn-ui">화이트리스트 추가</button>
+                            <button onclick="updatePermission('blacklist', 'add')" class="btn-ui btn-danger">블랙리스트 차단</button>
                         </div>
                     </div>
-
-                    <div class="content-card">
-                        <h3 style="color:#ff2d55; margin-bottom:12px; font-size:15px;">🛡️ 현재 등록된 어드민 명단</h3>
-                        <ul id="perm-admin-list" class="data-list"></ul>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                        <div class="content-card">
+                            <h3 style="color:#4ade80; margin-bottom:12px; font-size:15px;">화이트리스트 목록</h3>
+                            <ul id="perm-wl-list" class="data-list"></ul>
+                        </div>
+                        <div class="content-card">
+                            <h3 style="color:#f87171; margin-bottom:12px; font-size:15px;">블랙리스트 목록</h3>
+                            <ul id="perm-bl-list" class="data-list"></ul>
+                        </div>
                     </div>
                 </div>
 
                 <div id="view-admin-logs" class="tab-enter" style="display:none;">
-                    <div class="doc-title">실시간 활동 및 보안 접속 로그</div>
+                    <div class="doc-title">실시간 활동 로그</div>
                     <div class="content-card">
                         <div id="admin-log-box" style="background:rgba(3, 5, 9, 0.9); padding:16px; border-radius:12px; font-family:monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(255,255,255,0.05);"></div>
                     </div>
@@ -409,27 +408,18 @@ MAIN_HTML_TEMPLATE = """
         }
         animate();
 
-        let appState = { user: null, role: null, manuals: [], admin_whitelist: [], logs: [] };
+        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], logs: [] };
         let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
-        let searchedTargetUser = null;
 
         async function syncSystemState() {
             try {
-                const res = await fetch(`${window.location.origin}/api/state`);
+                const res = await fetch('/api/state');
+                if (res.status === 403) { alert("권한이 거부되었거나 변경되었습니다."); location.reload(); return; }
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.status === 'unauthorized') {
-                        document.getElementById('login-box').style.display = 'block';
-                        document.getElementById('main-dashboard').style.display = 'none';
-                        return;
-                    }
-                    if (data.status === 'forbidden') {
-                        alert('화이트리스트(허용된 스태프/어드민)에 등록되지 않은 계정입니다.');
-                        location.href = '/logout';
-                        return;
-                    }
+                    if (data.status === 'unauthorized') return;
 
                     appState = data;
                     document.getElementById('login-box').style.display = 'none';
@@ -450,6 +440,7 @@ MAIN_HTML_TEMPLATE = """
             } catch(e) { console.error("Sync error:", e); }
         }
 
+        /* 🚀 요청하신 랜덤 카운트 + 펄스 원형 로딩 인트로 구현 */
         function runCustomIntro(nickname, username, avatarUrl, onComplete) {
             const introOverlay = document.getElementById('intro-overlay');
             const introProgress = document.getElementById('intro-progress');
@@ -460,7 +451,7 @@ MAIN_HTML_TEMPLATE = """
             introAvatar.src = avatarUrl;
             introOverlay.style.display = 'flex';
 
-            const totalDuration = (Math.random() * (1600 - 500) + 500);
+            const totalDuration = (Math.random() * (2000 - 300) + 300); // 0.3초 ~ 2초 사이 랜덤
             const startTime = performance.now();
 
             function updateLoading(currentTime) {
@@ -471,10 +462,11 @@ MAIN_HTML_TEMPLATE = """
                 if (progress < 100) {
                     requestAnimationFrame(updateLoading);
                 } else {
+                    // 100% 완료 시 애니메이션 실행
                     introProgress.style.display = 'none';
-                    introRing.classList.add('expand');
-                    introAvatar.classList.add('show');
-                    introWelcome.innerText = `${nickname} (${username}) 님 환영합니다.`;
+                    introRing.classList.add('expand'); // 1.3배 확대 및 선 효과
+                    introAvatar.classList.add('show'); // 중앙 얼굴 팝업
+                    introWelcome.innerText = `${nickname}(${username}) 님 환영합니다.`;
                     introWelcome.classList.add('show');
 
                     setTimeout(() => {
@@ -483,7 +475,7 @@ MAIN_HTML_TEMPLATE = """
                             introOverlay.style.display = 'none';
                             onComplete();
                         }, 800);
-                    }, 800);
+                    }, 1200);
                 }
             }
             requestAnimationFrame(updateLoading);
@@ -492,453 +484,303 @@ MAIN_HTML_TEMPLATE = """
         function showMainDashboard(data, avatarUrl) {
             document.getElementById('main-dashboard').style.display = 'flex';
             document.getElementById('user-header-info').style.display = 'flex';
-            document.getElementById('user-avatar').src = avatarUrl;
-            document.getElementById('user-name').innerText = data.user.global_name || data.user.username;
 
-            const badge = document.getElementById('user-role-badge');
+            document.getElementById('user-avatar').src = avatarUrl;
+            document.getElementById('user-name').innerText = `${data.user.global_name || data.user.username}`;
+
+            const roleBadge = document.getElementById('user-role-badge');
             if (data.role === 'admin') {
-                badge.innerText = 'ADMIN';
-                badge.className = 'badge-admin';
+                roleBadge.innerText = 'ADMIN';
+                roleBadge.className = 'badge-admin';
                 document.getElementById('admin-menu-section').style.display = 'block';
             } else {
-                badge.innerText = 'STAFF';
-                badge.className = 'badge-staff';
+                roleBadge.innerText = 'STAFF';
+                roleBadge.className = 'badge-staff';
                 document.getElementById('admin-menu-section').style.display = 'none';
             }
 
-            renderSidebarManuals();
-            renderManualContent();
-            renderPermissionsLists();
-            renderAdminLogs();
+            renderCategorizedSidebar();
+            renderAdminViews();
         }
 
-        function renderSidebarManuals() {
+        /* 📌 상단 고정 및 주제(카테고리)별 사이드바 정렬 */
+        function renderCategorizedSidebar() {
             const container = document.getElementById('manual-sidebar-categorized');
             container.innerHTML = '';
 
+            // 상단 고정 매뉴얼 우선 정렬
+            const sortedManuals = [...appState.manuals].map((m, originalIdx) => ({ ...m, originalIdx }));
+            sortedManuals.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
             const categories = {};
-            appState.manuals.forEach((m, idx) => {
-                const cat = m.category || '공통 매뉴얼';
+            sortedManuals.forEach(item => {
+                const cat = item.category || '공통 매뉴얼';
                 if (!categories[cat]) categories[cat] = [];
-                categories[cat].push({ ...m, index: idx });
+                categories[cat].push(item);
             });
 
             for (const [catName, items] of Object.entries(categories)) {
                 const catTitle = document.createElement('div');
                 catTitle.className = 'sidebar-category-title';
-                catTitle.innerText = catName;
+                catTitle.innerText = `📂 ${catName}`;
                 container.appendChild(catTitle);
 
-                items.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-
-                items.forEach(item => {
+                items.forEach(m => {
                     const wrapper = document.createElement('div');
-                    wrapper.className = `aurora-btn-wrapper ${item.index === selectedManualIndex ? 'active' : ''}`;
-
-                    const btn = document.createElement('button');
-                    btn.className = 'item-btn';
-                    btn.innerHTML = `<span>${item.pinned ? '📌 ' : ''}${item.title}</span>`;
-                    btn.onclick = () => {
-                        selectedManualIndex = item.index;
-                        renderSidebarManuals();
-                        switchTab('view-manual');
-                        renderManualContent();
-                    };
-
-                    wrapper.appendChild(btn);
+                    wrapper.className = `aurora-btn-wrapper ${m.originalIdx === selectedManualIndex ? 'active' : ''}`;
+                    wrapper.innerHTML = `
+                        <button class="item-btn" onclick="selectManualItem(${m.originalIdx})">
+                            <span>${m.pinned ? '<span class="pin-badge">📌</span>' : ''}${m.title}</span>
+                        </button>
+                    `;
                     container.appendChild(wrapper);
                 });
             }
+
+            if (appState.manuals.length > 0) {
+                const current = appState.manuals[selectedManualIndex] || appState.manuals[0];
+                document.getElementById('doc-title').innerText = `${current.pinned ? '📌 ' : ''}${current.title}`;
+                document.getElementById('doc-body').innerText = current.content;
+            }
         }
 
-        function renderManualContent() {
-            const manual = appState.manuals[selectedManualIndex];
-            if (manual) {
-                document.getElementById('doc-title').innerText = manual.title;
-                document.getElementById('doc-body').innerText = manual.content;
+        function transitionToTab(targetTabId) {
+            if (currentActiveTabId === targetTabId) return;
 
-                document.getElementById('m-edit-category').value = manual.category || '';
-                document.getElementById('m-edit-title').value = manual.title || '';
-                document.getElementById('m-edit-content').value = manual.content || '';
-                document.getElementById('m-edit-pinned').checked = !!manual.pinned;
+            const currentTab = document.getElementById(currentActiveTabId);
+            const targetTab = document.getElementById(targetTabId);
+
+            if (currentTab) {
+                currentTab.classList.remove('tab-enter');
+                currentTab.classList.add('tab-leave');
+
+                setTimeout(() => {
+                    currentTab.style.display = 'none';
+                    currentTab.classList.remove('tab-leave');
+
+                    targetTab.style.display = 'block';
+                    targetTab.classList.add('tab-enter');
+                    currentActiveTabId = targetTabId;
+                }, 200);
             } else {
-                document.getElementById('doc-title').innerText = '매뉴얼이 없습니다.';
-                document.getElementById('doc-body').innerText = '등록된 매뉴얼 항목이 존재하지 않습니다.';
+                targetTab.style.display = 'block';
+                targetTab.classList.add('tab-enter');
+                currentActiveTabId = targetTabId;
             }
         }
 
-        function renderPermissionsLists() {
-            const adminUl = document.getElementById('perm-admin-list');
-            adminUl.innerHTML = '';
-
-            appState.admin_whitelist.forEach(id => {
-                const li = document.createElement('li');
-                li.innerHTML = `<span>어드민 ID: ${id}</span>
-                                <button onclick="removeAdmin('${id}')" class="btn-ui btn-danger" style="padding:4px 8px; font-size:11px;">권한 회수</button>`;
-                adminUl.appendChild(li);
-            });
+        function selectManualItem(idx) {
+            selectedManualIndex = idx;
+            document.querySelectorAll('.admin-nav').forEach(el => el.classList.remove('active'));
+            transitionToTab('view-manual');
+            renderCategorizedSidebar();
         }
 
-        function renderAdminLogs() {
-            const logBox = document.getElementById('admin-log-box');
-            logBox.innerHTML = appState.logs.map(log => `<div>${log}</div>`).join('');
+        function switchAdminTab(tabName) {
+            document.querySelectorAll('.admin-nav').forEach(el => el.classList.remove('active'));
+            const navEl = document.getElementById(`nav-${tabName}`);
+            if (navEl) navEl.classList.add('active');
+            transitionToTab(`view-admin-${tabName}`);
         }
 
-        function switchTab(tabId) {
-            if (currentActiveTabId === tabId) return;
-            const currentEl = document.getElementById(currentActiveTabId);
-            const targetEl = document.getElementById(tabId);
+        function renderAdminViews() {
+            if (appState.role !== 'admin') return;
 
-            document.querySelectorAll('.aurora-btn-wrapper').forEach(el => el.classList.remove('active'));
+            document.getElementById('perm-wl-list').innerHTML = appState.user_whitelist.map(id => `
+                <li><span>${id}</span><button onclick="updatePermission('whitelist', 'remove', '${id}')" class="btn-ui btn-danger" style="padding:3px 8px; font-size:12px;">삭제</button></li>
+            `).join('');
+            
+            document.getElementById('perm-bl-list').innerHTML = appState.user_blacklist.map(id => `
+                <li><span>${id}</span><button onclick="updatePermission('blacklist', 'remove', '${id}')" class="btn-ui btn-secondary" style="padding:3px 8px; font-size:12px;">해제</button></li>
+            `).join('');
 
-            if (currentEl) {
-                currentEl.style.display = 'none';
-                targetEl.style.display = 'block';
-                currentActiveTabId = tabId;
-            }
-        }
-
-        function switchAdminTab(adminType) {
-            const navWrapper = document.getElementById(`nav-${adminType}`);
-            switchTab(`view-admin-${adminType}`);
-            if (navWrapper) navWrapper.classList.add('active');
+            document.getElementById('admin-log-box').innerHTML = appState.logs.map(l => `
+                <div style="padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.03); color:${l.includes('[어드민]') ? '#38bdf8' : '#00ffaa'};">${l}</div>
+            `).join('');
         }
 
         async function saveManualData() {
-            const category = document.getElementById('m-edit-category').value.trim();
+            const category = document.getElementById('m-edit-category').value.trim() || '공통 매뉴얼';
+            const pinned = document.getElementById('m-edit-pinned').checked;
             const title = document.getElementById('m-edit-title').value.trim();
             const content = document.getElementById('m-edit-content').value.trim();
-            const pinned = document.getElementById('m-edit-pinned').checked;
+            if(!title) return alert('제목을 입력해주세요.');
 
-            if (!title || !content) { alert('제목과 내용을 입력해주세요.'); return; }
+            let updatedManuals = [...appState.manuals];
+            const manualObj = { category, pinned, title, content };
 
-            const res = await fetch(`${window.location.origin}/api/manual/save`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index: selectedManualIndex, category, title, content, pinned })
-            });
+            if (selectedManualIndex < updatedManuals.length) {
+                updatedManuals[selectedManualIndex] = manualObj;
+            } else {
+                updatedManuals.push(manualObj);
+            }
 
-            if (res.ok) {
-                alert('매뉴얼이 저장되었습니다.');
-                syncSystemState();
-            } else { alert('저장에 실패했습니다.'); }
+            await sendAdminAction({ action: 'save_manual', manuals: updatedManuals, title });
+            resetManualForm();
         }
 
         async function deleteManualData() {
-            if (!confirm('정말 삭제하시겠습니까?')) return;
-            const res = await fetch(`${window.location.origin}/api/manual/delete`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index: selectedManualIndex })
-            });
-
-            if (res.ok) {
-                alert('매뉴얼이 삭제되었습니다.');
+            if (confirm('매뉴얼을 삭제하시겠습니까?')) {
+                let updatedManuals = appState.manuals.filter((_, idx) => idx !== selectedManualIndex);
+                await sendAdminAction({ action: 'delete_manual', manuals: updatedManuals, title: appState.manuals[selectedManualIndex]?.title });
                 selectedManualIndex = 0;
-                syncSystemState();
-            } else { alert('삭제에 실패했습니다.'); }
+                resetManualForm();
+            }
         }
 
         function resetManualForm() {
             selectedManualIndex = appState.manuals.length;
             document.getElementById('m-edit-category').value = '';
+            document.getElementById('m-edit-pinned').checked = false;
             document.getElementById('m-edit-title').value = '';
             document.getElementById('m-edit-content').value = '';
-            document.getElementById('m-edit-pinned').checked = false;
         }
 
-        async function searchUser() {
-            const query = document.getElementById('perm-search-input').value.trim();
-            if (!query) { alert('검색할 디스코드 ID 또는 사용자명을 입력하세요.'); return; }
+        async function updatePermission(type, act, targetId = null) {
+            const id = targetId || document.getElementById('perm-target-id').value.trim();
+            if (!id) return alert('디스코드 유저 ID를 입력하세요.');
 
-            try {
-                const res = await fetch(`${window.location.origin}/api/user/lookup`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query })
-                });
+            let wl = [...appState.user_whitelist];
+            let bl = [...appState.user_blacklist];
 
-                if (res.ok) {
-                    const user = await res.json();
-                    searchedTargetUser = user;
-                    document.getElementById('preview-global-name').innerText = user.global_name || user.username;
-                    document.getElementById('preview-username').innerText = `@${user.username}`;
-                    document.getElementById('preview-id').innerText = `ID: ${user.id}`;
-                    document.getElementById('preview-avatar').src = user.avatar 
-                        ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` 
-                        : 'https://cdn.discordapp.com/embed/avatars/0.png';
-                    document.getElementById('user-search-result').style.display = 'flex';
-                } else {
-                    alert('사용자를 찾을 수 없습니다.');
-                    document.getElementById('user-search-result').style.display = 'none';
-                    searchedTargetUser = null;
-                }
-            } catch(e) { alert('조회 중 오류가 발생했습니다.'); }
-        }
-
-        async function applyAdminUpgrade() {
-            const query = document.getElementById('perm-search-input').value.trim();
-            const targetId = searchedTargetUser ? searchedTargetUser.id : query;
-
-            if (!targetId) { alert('유효한 디스코드 ID를 입력하세요.'); return; }
-
-            const res = await fetch(`${window.location.origin}/api/permission/upgrade`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target_id: String(targetId) })
-            });
-
-            if (res.ok) {
-                alert('성공적으로 어드민 권한으로 업그레이드되었습니다.');
-                syncSystemState();
+            if (type === 'whitelist') {
+                if (act === 'add' && !wl.includes(id)) wl.push(id);
+                if (act === 'remove') wl = wl.filter(i => i !== id);
             } else {
-                alert('어드민 업그레이드에 실패했습니다.');
+                if (act === 'add' && !bl.includes(id)) bl.push(id);
+                if (act === 'remove') bl = bl.filter(i => i !== id);
             }
+
+            await sendAdminAction({ action: `${act}_${type}`, user_whitelist: wl, user_blacklist: bl, target_id: id });
+            document.getElementById('perm-target-id').value = '';
         }
 
-        async function removeAdmin(targetId) {
-            if (!confirm(`사용자(${targetId})의 어드민 권한을 회수하시겠습니까?`)) return;
-
-            const res = await fetch(`${window.location.origin}/api/permission/remove-admin`, {
+        async function sendAdminAction(payload) {
+            const res = await fetch('/api/admin_update', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target_id: String(targetId) })
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
             });
-
-            if (res.ok) {
-                syncSystemState();
-            } else { alert('권한 회수에 실패했습니다.'); }
+            if (res.ok) syncSystemState();
         }
 
-        window.onload = syncSystemState;
+        syncSystemState();
+        setInterval(syncSystemState, 3000);
     </script>
 </body>
 </html>
 """
 
-# ==========================================
-# 🔌 백엔드 API 컨트롤러
-# ==========================================
-
 @app.route('/')
-def index():
-    return render_template_string(MAIN_HTML_TEMPLATE, CLIENT_ID=CLIENT_ID)
+def main_page():
+    return MAIN_HTML_TEMPLATE.replace('__CLIENT_ID__', CLIENT_ID)
 
 @app.route('/callback')
 def callback():
     code = request.args.get('code')
     if not code:
-        return redirect(url_for('index'))
+        return "인증 코드 오류가 발생했습니다.", 400
 
-    redirect_uri = url_for('callback', _external=True)
-    token_url = 'https://discord.com/api/oauth2/token'
-    
-    data = {
+    redirect_uri = f"{BASE_URL}/callback"
+    token_data = {
         'client_id': CLIENT_ID,
         'client_secret': CLIENT_SECRET,
         'grant_type': 'authorization_code',
         'code': code,
         'redirect_uri': redirect_uri
     }
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    res = requests.post('https://discord.com/api/v10/oauth2/token', data=token_data, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+    
+    if res.status_code == 200:
+        access_token = res.json().get('access_token')
+        user_res = requests.get('https://discord.com/api/v10/users/@me', headers={'Authorization': f'Bearer {access_token}'})
+        if user_res.status_code == 200:
+            user_info = user_res.json()
+            user_id = str(user_info.get('id'))
+            data = load_data()
 
-    try:
-        res = requests.post(token_url, data=data, headers=headers, timeout=5)
-        res_data = res.json()
-        access_token = res_data.get('access_token')
+            # 블랙리스트 체크
+            if user_id in data.get('user_blacklist', []):
+                return "<h2 style='color:#ef4444; text-align:center; margin-top:100px;'>접근 차단: 블랙리스트 계정입니다.</h2>", 403
 
-        if access_token:
-            user_res = requests.get('https://discord.com/api/users/@me', headers={'Authorization': f'Bearer {access_token}'}, timeout=5)
-            user_data = user_res.json()
-
-            if 'id' in user_data:
-                db = load_data()
-                user_id = str(user_data['id'])
+            # 화이트리스트 체크 (어드민은 자동 통과)
+            if user_id in data.get('admin_whitelist', []):
+                session['user'] = user_info
+                session['role'] = 'admin'
+                add_log(data, "어드민", user_info.get('username'), f"시스템 로그인 성공 (어드민 권한)")
+            else:
+                if data.get('user_whitelist') and user_id not in data.get('user_whitelist'):
+                    return f"<h2 style='color:#ef4444; text-align:center; margin-top:100px;'>접근 거부: 화이트리스트에 등록되지 않았습니다. (ID: {user_id})</h2>", 403
                 
-                # [화이트리스트 검증] 등록된 사용자(어드민 또는 스태프)만 로그인 세션 허용
-                whitelist = [str(x) for x in db.get('admin_whitelist', [])]
-                # 필요시 별도의 스태프 화이트리스트 목록을 추가하거나 admin_whitelist를 공통 화이트리스트로 사용
-                if user_id not in whitelist:
-                    # 화이트리스트에 없는 경우 세션을 부여하지 않고 거부
-                    return redirect('/?error=forbidden')
+                session['user'] = user_info
+                session['role'] = 'staff'
+                add_log(data, "스태프", user_info.get('username'), f"스태프 시스템 접속")
 
-                session['user'] = user_data
-                session.permanent = True
-                session.modified = True
+            save_data(data)
+            return redirect('/')
 
-                user_name = user_data.get('global_name') or user_data.get('username')
-                add_log(db, "AUTH", user_name, "시스템 로그인 완료")
-                save_data(db)
-
-    except Exception as e:
-        print(f"[Auth Error] {e}")
-
-    return redirect('/')
+    return "Discord 인증에 실패했습니다.", 400
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect('/')
 
-@app.route('/api/state', methods=['GET'], strict_slashes=False)
-def api_state():
+@app.route('/api/state')
+def get_system_state():
     user = session.get('user')
+    role = session.get('role')
     if not user:
-        return jsonify({'status': 'unauthorized'}), 200
+        return jsonify({"status": "unauthorized"}), 401
 
-    db = load_data()
-    user_id = str(user['id'])
-    whitelist = [str(x) for x in db.get('admin_whitelist', [])]
+    data = load_data()
+    user_id = str(user.get('id'))
 
-    if user_id not in whitelist:
-        session.clear()
-        return jsonify({'status': 'forbidden'}), 200
+    if role != 'admin':
+        if user_id in data.get('user_blacklist', []):
+            session.clear()
+            return jsonify({"status": "forbidden"}), 403
+        if data.get('user_whitelist') and user_id not in data.get('user_whitelist'):
+            session.clear()
+            return jsonify({"status": "forbidden"}), 403
 
-    is_admin = user_id in whitelist  # 현재 구조상 화이트리스트 등록자는 관리자 권한 부여 (필요시 분리 가능)
-    role = 'admin' if is_admin else 'staff'
-
-    return jsonify({
-        'status': 'success',
-        'user': user,
-        'role': role,
-        'manuals': db.get('manuals', []),
-        'admin_whitelist': db.get('admin_whitelist', []),
-        'logs': db.get('logs', []) if is_admin else []
-    })
-
-@app.route('/api/user/lookup', methods=['POST'], strict_slashes=False)
-def api_user_lookup():
-    user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
-
-    db = load_data()
-    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
-        return jsonify({'error': 'Forbidden'}), 403
-
-    req_data = request.get_json() or {}
-    query = str(req_data.get('query', '')).strip().lstrip('@')
-
-    if not query: return jsonify({'error': 'Query required'}), 400
-
-    if query.isdigit():
-        if BOT_TOKEN:
-            try:
-                res = requests.get(f"https://discord.com/api/v10/users/{query}", headers={"Authorization": f"Bot {BOT_TOKEN}"}, timeout=5)
-                if res.status_code == 200:
-                    return jsonify(res.json())
-            except Exception: pass
-        return jsonify({"id": query, "username": f"User_{query}", "global_name": f"사용자 ({query})", "avatar": None})
-
-    return jsonify({'error': 'User not found'}), 404
-
-@app.route('/api/manual/save', methods=['POST'], strict_slashes=False)
-def api_manual_save():
-    user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
-
-    db = load_data()
-    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
-        return jsonify({'error': 'Forbidden'}), 403
-
-    req_data = request.get_json() or {}
-    index = req_data.get('index')
-    category = req_data.get('category', '공통 매뉴얼')
-    title = req_data.get('title')
-    content = req_data.get('content')
-    pinned = req_data.get('pinned', False)
-
-    manuals = db.get('manuals', [])
-    manual_entry = {
-        'id': len(manuals) + 1 if index >= len(manuals) else manuals[index].get('id', index + 1),
-        'category': category,
-        'title': title,
-        'content': content,
-        'pinned': pinned
+    response_payload = {
+        "status": "authenticated",
+        "user": user,
+        "role": role,
+        "manuals": data.get("manuals", [])
     }
 
-    if index is not None and 0 <= index < len(manuals):
-        manuals[index] = manual_entry
-    else:
-        manuals.append(manual_entry)
+    if role == 'admin':
+        response_payload["user_whitelist"] = data.get("user_whitelist", [])
+        response_payload["user_blacklist"] = data.get("user_blacklist", [])
+        response_payload["logs"] = data.get("logs", [])
 
-    db['manuals'] = manuals
-    user_name = user.get('global_name') or user.get('username')
-    add_log(db, "MANUAL", user_name, f"매뉴얼 저장/수정 ('{title}')")
-    save_data(db)
+    return jsonify(response_payload)
 
-    return jsonify({'status': 'success'})
+@app.route('/api/admin_update', methods=['POST'])
+def handle_admin_update():
+    if session.get('role') != 'admin':
+        return jsonify({"status": "unauthorized"}), 401
 
-@app.route('/api/manual/delete', methods=['POST'], strict_slashes=False)
-def api_manual_delete():
     user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
+    data = load_data()
+    req = request.get_json()
+    action = req.get('action')
 
-    db = load_data()
-    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
-        return jsonify({'error': 'Forbidden'}), 403
+    if 'manuals' in req: data['manuals'] = req['manuals']
+    if 'user_whitelist' in req: data['user_whitelist'] = req['user_whitelist']
+    if 'user_blacklist' in req: data['user_blacklist'] = req['user_blacklist']
 
-    req_data = request.get_json() or {}
-    index = req_data.get('index')
-    manuals = db.get('manuals', [])
+    if action == 'save_manual': add_log(data, "어드민", user.get('username'), f"매뉴얼 저장 ({req.get('title')})")
+    elif action == 'delete_manual': add_log(data, "어드민", user.get('username'), f"매뉴얼 삭제 ({req.get('title')})")
+    elif action == 'add_whitelist': add_log(data, "어드민", user.get('username'), f"화이트리스트 추가 ({req.get('target_id')})")
+    elif action == 'add_blacklist': add_log(data, "어드민", user.get('username'), f"블랙리스트 등록 ({req.get('target_id')})")
+    elif action == 'remove_whitelist': add_log(data, "어드민", user.get('username'), f"화이트리스트 삭제 ({req.get('target_id')})")
+    elif action == 'remove_blacklist': add_log(data, "어드민", user.get('username'), f"블랙리스트 해제 ({req.get('target_id')})")
 
-    if index is not None and 0 <= index < len(manuals):
-        deleted = manuals.pop(index)
-        db['manuals'] = manuals
-        user_name = user.get('global_name') or user.get('username')
-        add_log(db, "MANUAL", user_name, f"매뉴얼 삭제 ('{deleted.get('title')}')")
-        save_data(db)
-        return jsonify({'status': 'success'})
-
-    return jsonify({'error': 'Invalid index'}), 400
-
-@app.route('/api/permission/upgrade', methods=['POST'], strict_slashes=False)
-def api_permission_upgrade():
-    user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
-
-    db = load_data()
-    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
-        return jsonify({'error': 'Forbidden'}), 403
-
-    req_data = request.get_json() or {}
-    target_id = str(req_data.get('target_id', '')).strip()
-
-    if not target_id: return jsonify({'error': 'Target ID required'}), 400
-
-    user_name = user.get('global_name') or user.get('username')
-    db['admin_whitelist'] = [str(x) for x in db.get('admin_whitelist', [])]
-
-    if target_id not in db['admin_whitelist']:
-        db['admin_whitelist'].append(target_id)
-        add_log(db, "PERMISSION", user_name, f"어드민 권한 업그레이드 (ID: {target_id})")
-
-    save_data(db)
-    return jsonify({'status': 'success'})
-
-@app.route('/api/permission/remove-admin', methods=['POST'], strict_slashes=False)
-def api_permission_remove_admin():
-    user = session.get('user')
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
-
-    db = load_data()
-    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
-        return jsonify({'error': 'Forbidden'}), 403
-
-    req_data = request.get_json() or {}
-    target_id = str(req_data.get('target_id', '')).strip()
-
-    if not target_id: return jsonify({'error': 'Target ID required'}), 400
-
-    user_name = user.get('global_name') or user.get('username')
-    db['admin_whitelist'] = [str(x) for x in db.get('admin_whitelist', [])]
-
-    if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
-        db['admin_whitelist'].remove(target_id)
-        add_log(db, "PERMISSION", user_name, f"어드민 권한 회수 (ID: {target_id})")
-        save_data(db)
-        return jsonify({'status': 'success'})
-
-    return jsonify({'error': 'Cannot remove default admin or user not in list'}), 400
+    save_data(data)
+    return jsonify({"status": "ok"})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
