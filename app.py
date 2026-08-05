@@ -8,16 +8,16 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
 
-# 프록시 및 헤더 설정 (Reverse Proxy 환경 대응 - x_prefix 제외하여 404 왜곡 방지)
+# Reverse Proxy 환경 대응
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # ==========================================
-# ⚙️ 쿠키 및 세션 보안 설정
+# ⚙️ 쿠키 및 세션 보안 설정 (무한 로그인 방지)
 # ==========================================
 app.secret_key = os.environ.get("SECRET_KEY", "sky_aurora_super_secret_key_2026")
 app.config['SESSION_COOKIE_NAME'] = 'sky_aurora_session'
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS 환경 필수
+app.config['SESSION_COOKIE_SECURE'] = False  # HTTP/HTTPS 환경 유연 대응
 app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(days=7)
 
 # ==========================================
@@ -34,7 +34,7 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
 
 # --------------------------------------------------
-# 📁 데이터 불러오기 및 영구 저장 로직
+# 📁 데이터 저장/불러오기
 # --------------------------------------------------
 def load_data():
     data = None
@@ -68,7 +68,7 @@ def load_data():
                     "category": "보안 지침",
                     "pinned": True,
                     "title": "01. 기본 보안 규칙",
-                    "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템 화면 캡처 및 무단 촬영 금지\n2. 계정 타인 공유 금지\n3. 접속 IP 및 접근 기록 실시간 로깅 중"
+                    "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다."
                 }
             ],
             "logs": []
@@ -95,7 +95,7 @@ def save_data(data):
             encoded_content = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
             
             payload = {
-                "message": f"Auto-sync manual data [{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
+                "message": f"Auto-sync data [{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
                 "content": encoded_content
             }
             if sha:
@@ -113,7 +113,7 @@ def add_log(data, category, user_name, action):
     data["logs"].insert(0, log_entry)
 
 # --------------------------------------------------
-# 🎨 프론트엔드 UI/UX HTML
+# 🎨 프론트엔드 UI/UX
 # --------------------------------------------------
 MAIN_HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -181,7 +181,6 @@ MAIN_HTML_TEMPLATE = """
             border-radius: 24px; box-shadow: 0 0 60px rgba(0, 255, 170, 0.12);
             display: flex; flex-direction: column; overflow: hidden; animation: containerAppear 0.8s ease;
         }
-        @keyframes containerAppear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
         header { padding: 16px 24px; background: rgba(5, 8, 18, 0.95); border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; }
         header h1 { font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
@@ -207,7 +206,6 @@ MAIN_HTML_TEMPLATE = """
         .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); box-shadow: 0 0 15px rgba(0, 255, 170, 0.4); }
         .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: rgba(10, 16, 32, 0.95); border: none; color: #8a99ad; border-radius: 10px; cursor: pointer; font-size: 13px; font-family: 'Pretendard', sans-serif; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
         .aurora-btn-wrapper.active .item-btn { color: #ffffff; background: rgba(6, 24, 38, 0.95); font-weight: bold; }
-        .pin-badge { font-size: 11px; margin-right: 4px; }
 
         .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; }
         .content-card { background: rgba(5, 8, 17, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -227,9 +225,7 @@ MAIN_HTML_TEMPLATE = """
         ul.data-list li { background: rgba(10, 16, 32, 0.7); padding: 12px 14px; margin-bottom: 8px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
 
         .tab-enter { animation: manualEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .tab-leave { animation: manualLeave 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
         @keyframes manualEnter { 0% { opacity: 0; transform: translateY(20px) scale(0.98); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-        @keyframes manualLeave { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-15px) scale(0.98); } }
 
         .user-preview-card {
             display: flex; align-items: center; gap: 14px; background: rgba(0, 255, 170, 0.05);
@@ -310,7 +306,7 @@ MAIN_HTML_TEMPLATE = """
             <div class="alert-icon" style="font-size: 50px;">⚠️</div>
             <h2 id="denied-title" class="access-denied-title">접근 차단됨</h2>
             <p id="denied-desc" style="font-size:14px; color:#cbd5e1; font-family:'Pretendard'; margin-bottom:20px;">화이트리스트에 등록된 인원만 시스템에 접속할 수 있습니다.</p>
-            <a href="/logout" class="logout-btn" style="display:inline-block; padding:10px 20px;">다시 시도 / 로그아웃</a>
+            <a href="/logout" class="logout-btn" style="display:inline-block; padding:10px 20px;">로그아웃 / 다시 로그인</a>
         </div>
 
         <div id="main-dashboard" class="dashboard" style="display:none;">
@@ -350,7 +346,7 @@ MAIN_HTML_TEMPLATE = """
                         <textarea id="m-edit-content" style="height:220px;" placeholder="매뉴얼 상세 내용을 입력하세요"></textarea>
                         <div style="display:flex; gap:10px;">
                             <button onclick="saveManualData()" class="btn-ui" style="flex:1;">💾 선택된 매뉴얼 저장/수정</button>
-                            <button onclick="deleteManualData()" class="btn-ui btn-danger" style="width:110px;">🗑️ 매뉴얼 삭제</button>
+                            <button onclick="deleteManualData()" class="btn-ui btn-danger" style="width:110px;">🗑️ 삭제</button>
                             <button onclick="resetManualForm()" class="btn-ui btn-secondary" style="width:110px;">새 매뉴얼</button>
                         </div>
                     </div>
@@ -443,20 +439,25 @@ MAIN_HTML_TEMPLATE = """
         async function syncSystemState() {
             try {
                 const res = await fetch(`${window.location.origin}/api/state`);
+                
+                // 블랙리스트 또는 권한 없음 처리 (403 코드로 감지)
                 if (res.status === 403) {
                     const errData = await res.json();
                     document.getElementById('login-box').style.display = 'none';
                     document.getElementById('main-dashboard').style.display = 'none';
+                    document.getElementById('user-header-info').style.display = 'none';
                     document.getElementById('access-denied-box').style.display = 'block';
+                    
                     if (errData.reason === 'blacklisted') {
                         document.getElementById('denied-title').innerText = "⚠️ 접근 차단 (BLACK LIST)";
-                        document.getElementById('denied-desc').innerText = "귀하의 계정은 블랙리스트로 등록되어 시스템 접근이 차단되었습니다.";
+                        document.getElementById('denied-desc').innerText = "귀하의 계정은 블랙리스트로 등록되어 접속이 즉시 차단되었습니다.";
                     } else {
                         document.getElementById('denied-title').innerText = "🔒 접근 승인 대기 중";
                         document.getElementById('denied-desc').innerText = "화이트리스트에 등록되지 않은 계정입니다. 관리자에게 승인을 요청하세요.";
                     }
                     return;
                 }
+
                 if (res.ok) {
                     const data = await res.json();
                     if (data.status === 'unauthorized') {
@@ -486,6 +487,13 @@ MAIN_HTML_TEMPLATE = """
             } catch(e) { console.error("Sync error:", e); }
         }
 
+        // 실시간 권한 감지 폴링 (블랙리스트로 강등 시 즉시 퇴장 처리)
+        setInterval(() => {
+            if (document.getElementById('main-dashboard').style.display === 'flex') {
+                syncSystemState();
+            }
+        }, 8000);
+
         function runCustomIntro(nickname, username, avatarUrl, onComplete) {
             const introOverlay = document.getElementById('intro-overlay');
             const introProgress = document.getElementById('intro-progress');
@@ -496,7 +504,7 @@ MAIN_HTML_TEMPLATE = """
             introAvatar.src = avatarUrl;
             introOverlay.style.display = 'flex';
 
-            const totalDuration = (Math.random() * (1800 - 400) + 400);
+            const totalDuration = (Math.random() * (1600 - 500) + 500);
             const startTime = performance.now();
 
             function updateLoading(currentTime) {
@@ -519,7 +527,7 @@ MAIN_HTML_TEMPLATE = """
                             introOverlay.style.display = 'none';
                             onComplete();
                         }, 800);
-                    }, 1000);
+                    }, 800);
                 }
             }
             requestAnimationFrame(updateLoading);
@@ -573,7 +581,7 @@ MAIN_HTML_TEMPLATE = """
 
                     const btn = document.createElement('button');
                     btn.className = 'item-btn';
-                    btn.innerHTML = `<span>${item.pinned ? '<span class="pin-badge">📌</span>' : ''}${item.title}</span>`;
+                    btn.innerHTML = `<span>${item.pinned ? '📌 ' : ''}${item.title}</span>`;
                     btn.onclick = () => {
                         selectedManualIndex = item.index;
                         renderSidebarManuals();
@@ -638,15 +646,9 @@ MAIN_HTML_TEMPLATE = """
             document.querySelectorAll('.aurora-btn-wrapper').forEach(el => el.classList.remove('active'));
 
             if (currentEl) {
-                currentEl.classList.remove('tab-enter');
-                currentEl.classList.add('tab-leave');
-                setTimeout(() => {
-                    currentEl.style.display = 'none';
-                    currentEl.classList.remove('tab-leave');
-                    targetEl.style.display = 'block';
-                    targetEl.classList.add('tab-enter');
-                    currentActiveTabId = tabId;
-                }, 200);
+                currentEl.style.display = 'none';
+                targetEl.style.display = 'block';
+                currentActiveTabId = tabId;
             }
         }
 
@@ -745,8 +747,7 @@ MAIN_HTML_TEMPLATE = """
                 alert('권한 상태가 정상 변경되었습니다.');
                 syncSystemState();
             } else {
-                const err = await res.json().catch(() => ({}));
-                alert(`권한 변경 실패 (오류: ${res.status}) ${err.error || ''}`);
+                alert('권한 변경에 실패했습니다.');
             }
         }
 
@@ -771,7 +772,7 @@ MAIN_HTML_TEMPLATE = """
 """
 
 # ==========================================
-# 🔌 API 라우트 및 컨트롤러
+# 🔌 백엔드 API 컨트롤러
 # ==========================================
 
 @app.route('/')
@@ -784,7 +785,7 @@ def callback():
     if not code:
         return redirect(url_for('index'))
 
-    # 스키마(https/http) 포함 정확한 Redirect URI 구성
+    # OAuth 리다이렉트 URI 엄격 추출
     redirect_uri = url_for('callback', _external=True)
     token_url = 'https://discord.com/api/oauth2/token'
     
@@ -802,31 +803,31 @@ def callback():
         res_data = res.json()
         access_token = res_data.get('access_token')
 
-        if not access_token:
-            return redirect(url_for('index'))
+        if access_token:
+            user_res = requests.get('https://discord.com/api/users/@me', headers={'Authorization': f'Bearer {access_token}'}, timeout=5)
+            user_data = user_res.json()
 
-        user_res = requests.get('https://discord.com/api/users/@me', headers={'Authorization': f'Bearer {access_token}'}, timeout=5)
-        user_data = user_res.json()
+            if 'id' in user_data:
+                # 세션 강제 저장 설정
+                session['user'] = user_data
+                session.permanent = True
+                session.modified = True
 
-        if 'id' in user_data:
-            session['user'] = user_data
-            session.permanent = True
-
-            # 접속 로그 기록
-            db = load_data()
-            user_name = user_data.get('global_name') or user_data.get('username')
-            add_log(db, "AUTH", user_name, "시스템 로그인")
-            save_data(db)
+                db = load_data()
+                user_name = user_data.get('global_name') or user_data.get('username')
+                add_log(db, "AUTH", user_name, "시스템 인증 완료")
+                save_data(db)
 
     except Exception as e:
         print(f"[Auth Error] {e}")
 
-    return redirect(url_for('index'))
+    # 리다이렉트 무한 루프 예방을 위한 루트 이동
+    return redirect('/')
 
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('index'))
+    return redirect('/')
 
 @app.route('/api/state', methods=['GET'], strict_slashes=False)
 def api_state():
@@ -837,11 +838,11 @@ def api_state():
     db = load_data()
     user_id = str(user['id'])
 
-    # 블랙리스트 검증 (화이트리스트보다 블랙리스트 우선 적용)
+    # 1. 블랙리스트 최우선 검증
     if user_id in [str(b) for b in db.get('user_blacklist', [])]:
         return jsonify({'error': 'Forbidden', 'reason': 'blacklisted'}), 403
 
-    # 최고 관리자 및 화이트리스트 접근 권한 검증
+    # 2. 화이트리스트 및 어드민 검증
     is_admin = user_id in [str(a) for a in db.get('admin_whitelist', [])]
     is_whitelisted = user_id in [str(w) for w in db.get('user_whitelist', [])]
 
@@ -864,14 +865,12 @@ def api_state():
 @app.route('/api/user/lookup', methods=['POST'], strict_slashes=False)
 def api_user_lookup():
     user = session.get('user')
-    if not user: 
-        return jsonify({'error': 'Unauthorized'}), 401
+    if not user: return jsonify({'error': 'Unauthorized'}), 401
 
     req_data = request.get_json() or {}
     query = str(req_data.get('query', '')).strip().lstrip('@')
 
-    if not query: 
-        return jsonify({'error': 'Query required'}), 400
+    if not query: return jsonify({'error': 'Query required'}), 400
 
     if query.isdigit():
         if BOT_TOKEN:
@@ -879,8 +878,7 @@ def api_user_lookup():
                 res = requests.get(f"https://discord.com/api/v10/users/{query}", headers={"Authorization": f"Bot {BOT_TOKEN}"}, timeout=5)
                 if res.status_code == 200:
                     return jsonify(res.json())
-            except Exception:
-                pass
+            except Exception: pass
         return jsonify({"id": query, "username": f"User_{query}", "global_name": f"사용자 ({query})", "avatar": None})
 
     return jsonify({'error': 'User not found'}), 404
@@ -888,8 +886,7 @@ def api_user_lookup():
 @app.route('/api/manual/save', methods=['POST'], strict_slashes=False)
 def api_manual_save():
     user = session.get('user')
-    if not user: 
-        return jsonify({'error': 'Unauthorized'}), 401
+    if not user: return jsonify({'error': 'Unauthorized'}), 401
 
     db = load_data()
     if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
@@ -926,8 +923,7 @@ def api_manual_save():
 @app.route('/api/manual/delete', methods=['POST'], strict_slashes=False)
 def api_manual_delete():
     user = session.get('user')
-    if not user: 
-        return jsonify({'error': 'Unauthorized'}), 401
+    if not user: return jsonify({'error': 'Unauthorized'}), 401
 
     db = load_data()
     if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
@@ -950,8 +946,7 @@ def api_manual_delete():
 @app.route('/api/permission/apply', methods=['POST'], strict_slashes=False)
 def api_permission_apply():
     user = session.get('user')
-    if not user: 
-        return jsonify({'error': 'Unauthorized'}), 401
+    if not user: return jsonify({'error': 'Unauthorized'}), 401
 
     db = load_data()
     if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
@@ -959,11 +954,10 @@ def api_permission_apply():
 
     req_data = request.get_json() or {}
     target_id = str(req_data.get('target_id', '')).strip()
-    action = req_data.get('action')  # 'add' 또는 'blacklist'
-    role = req_data.get('role', 'staff')  # 'staff' 또는 'admin'
+    action = req_data.get('action')
+    role = req_data.get('role', 'staff')
 
-    if not target_id: 
-        return jsonify({'error': 'Target ID required'}), 400
+    if not target_id: return jsonify({'error': 'Target ID required'}), 400
 
     user_name = user.get('global_name') or user.get('username')
 
@@ -1001,8 +995,7 @@ def api_permission_apply():
 @app.route('/api/permission/remove', methods=['POST'], strict_slashes=False)
 def api_permission_remove():
     user = session.get('user')
-    if not user: 
-        return jsonify({'error': 'Unauthorized'}), 401
+    if not user: return jsonify({'error': 'Unauthorized'}), 401
 
     db = load_data()
     if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
@@ -1010,10 +1003,9 @@ def api_permission_remove():
 
     req_data = request.get_json() or {}
     target_id = str(req_data.get('target_id', '')).strip()
-    list_type = req_data.get('list_type')  # 'whitelist' 또는 'blacklist'
+    list_type = req_data.get('list_type')
 
-    if not target_id:
-        return jsonify({'error': 'Target ID required'}), 400
+    if not target_id: return jsonify({'error': 'Target ID required'}), 400
 
     user_name = user.get('global_name') or user.get('username')
 
