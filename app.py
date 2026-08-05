@@ -31,7 +31,6 @@ DATA_FILE = "sky_aurora_admin_data.json"
 DEFAULT_ADMINS = ["1534184089144266872", "843621337066504225"]
 
 # 깃허브 토큰과 레포지토리는 환경 변수에서 안전하게 불러옵니다.
-# (배포 환경이나 로컬 환경 변수에 GITHUB_TOKEN을 설정해주세요)
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_REPO = "itx-0622/sky-aurora-staff"
 
@@ -426,6 +425,11 @@ MAIN_HTML_TEMPLATE = """
                         document.getElementById('main-dashboard').style.display = 'none';
                         return;
                     }
+                    if (data.status === 'forbidden') {
+                        alert('화이트리스트(허용된 스태프/어드민)에 등록되지 않은 계정입니다.');
+                        location.href = '/logout';
+                        return;
+                    }
 
                     appState = data;
                     document.getElementById('login-box').style.display = 'none';
@@ -748,11 +752,20 @@ def callback():
             user_data = user_res.json()
 
             if 'id' in user_data:
+                db = load_data()
+                user_id = str(user_data['id'])
+                
+                # [화이트리스트 검증] 등록된 사용자(어드민 또는 스태프)만 로그인 세션 허용
+                whitelist = [str(x) for x in db.get('admin_whitelist', [])]
+                # 필요시 별도의 스태프 화이트리스트 목록을 추가하거나 admin_whitelist를 공통 화이트리스트로 사용
+                if user_id not in whitelist:
+                    # 화이트리스트에 없는 경우 세션을 부여하지 않고 거부
+                    return redirect('/?error=forbidden')
+
                 session['user'] = user_data
                 session.permanent = True
                 session.modified = True
 
-                db = load_data()
                 user_name = user_data.get('global_name') or user_data.get('username')
                 add_log(db, "AUTH", user_name, "시스템 로그인 완료")
                 save_data(db)
@@ -775,8 +788,13 @@ def api_state():
 
     db = load_data()
     user_id = str(user['id'])
+    whitelist = [str(x) for x in db.get('admin_whitelist', [])]
 
-    is_admin = user_id in [str(a) for a in db.get('admin_whitelist', [])]
+    if user_id not in whitelist:
+        session.clear()
+        return jsonify({'status': 'forbidden'}), 200
+
+    is_admin = user_id in whitelist  # 현재 구조상 화이트리스트 등록자는 관리자 권한 부여 (필요시 분리 가능)
     role = 'admin' if is_admin else 'staff'
 
     return jsonify({
@@ -792,6 +810,10 @@ def api_state():
 def api_user_lookup():
     user = session.get('user')
     if not user: return jsonify({'error': 'Unauthorized'}), 401
+
+    db = load_data()
+    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
+        return jsonify({'error': 'Forbidden'}), 403
 
     req_data = request.get_json() or {}
     query = str(req_data.get('query', '')).strip().lstrip('@')
