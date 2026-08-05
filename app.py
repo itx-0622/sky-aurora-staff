@@ -196,8 +196,6 @@ MAIN_HTML_TEMPLATE = """
         .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
         .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5); }
 
-        .access-denied-title { font-size: 20px; color: #ff2d55; margin-bottom: 10px; font-family: 'GmarketSansBold'; }
-
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         .sidebar { width: 300px; background: rgba(0, 0, 0, 0.4); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 20px 14px; overflow-y: auto; }
         .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1px; margin: 16px 0 8px 8px; text-transform: uppercase; font-family: 'Pretendard'; font-weight: bold; }
@@ -302,12 +300,7 @@ MAIN_HTML_TEMPLATE = """
             </button>
         </div>
 
-        <div id="access-denied-box" class="login-box" style="display:none; border-color:#ff2d55;">
-            <div class="alert-icon" style="font-size: 50px;">⚠️</div>
-            <h2 id="denied-title" class="access-denied-title">접근 차단됨</h2>
-            <p id="denied-desc" style="font-size:14px; color:#cbd5e1; font-family:'Pretendard'; margin-bottom:20px;">화이트리스트에 등록된 인원만 시스템에 접속할 수 있습니다.</p>
-            <a href="/logout" class="logout-btn" style="display:inline-block; padding:10px 20px;">로그아웃 / 다시 로그인</a>
-        </div>
+        <!-- 화이트리스트 차단 박스 제거됨 (모두 접속 가능) -->
 
         <div id="main-dashboard" class="dashboard" style="display:none;">
             <div class="sidebar">
@@ -440,20 +433,16 @@ MAIN_HTML_TEMPLATE = """
             try {
                 const res = await fetch(`${window.location.origin}/api/state`);
                 
-                // 블랙리스트 또는 권한 없음 처리 (403 코드로 감지)
+                // 블랙리스트 차단만 유지 (화이트리스트 제한은 해제됨)
                 if (res.status === 403) {
                     const errData = await res.json();
                     document.getElementById('login-box').style.display = 'none';
                     document.getElementById('main-dashboard').style.display = 'none';
                     document.getElementById('user-header-info').style.display = 'none';
-                    document.getElementById('access-denied-box').style.display = 'block';
                     
                     if (errData.reason === 'blacklisted') {
-                        document.getElementById('denied-title').innerText = "⚠️ 접근 차단 (BLACK LIST)";
-                        document.getElementById('denied-desc').innerText = "귀하의 계정은 블랙리스트로 등록되어 접속이 즉시 차단되었습니다.";
-                    } else {
-                        document.getElementById('denied-title').innerText = "🔒 접근 승인 대기 중";
-                        document.getElementById('denied-desc').innerText = "화이트리스트에 등록되지 않은 계정입니다. 관리자에게 승인을 요청하세요.";
+                        alert("귀하의 계정은 블랙리스트로 등록되어 접속이 차단되었습니다.");
+                        location.href = '/logout';
                     }
                     return;
                 }
@@ -462,14 +451,12 @@ MAIN_HTML_TEMPLATE = """
                     const data = await res.json();
                     if (data.status === 'unauthorized') {
                         document.getElementById('login-box').style.display = 'block';
-                        document.getElementById('access-denied-box').style.display = 'none';
                         document.getElementById('main-dashboard').style.display = 'none';
                         return;
                     }
 
                     appState = data;
                     document.getElementById('login-box').style.display = 'none';
-                    document.getElementById('access-denied-box').style.display = 'none';
 
                     const avatarUrl = data.user.avatar 
                         ? `https://cdn.discordapp.com/avatars/${data.user.id}/${data.user.avatar}.png` 
@@ -487,7 +474,7 @@ MAIN_HTML_TEMPLATE = """
             } catch(e) { console.error("Sync error:", e); }
         }
 
-        // 실시간 권한 감지 폴링 (블랙리스트로 강등 시 즉시 퇴장 처리)
+        // 블랙리스트 변경 감지 폴링
         setInterval(() => {
             if (document.getElementById('main-dashboard').style.display === 'flex') {
                 syncSystemState();
@@ -785,7 +772,6 @@ def callback():
     if not code:
         return redirect(url_for('index'))
 
-    # OAuth 리다이렉트 URI 엄격 추출
     redirect_uri = url_for('callback', _external=True)
     token_url = 'https://discord.com/api/oauth2/token'
     
@@ -808,7 +794,6 @@ def callback():
             user_data = user_res.json()
 
             if 'id' in user_data:
-                # 세션 강제 저장 설정
                 session['user'] = user_data
                 session.permanent = True
                 session.modified = True
@@ -821,7 +806,6 @@ def callback():
     except Exception as e:
         print(f"[Auth Error] {e}")
 
-    # 리다이렉트 무한 루프 예방을 위한 루트 이동
     return redirect('/')
 
 @app.route('/logout')
@@ -838,17 +822,12 @@ def api_state():
     db = load_data()
     user_id = str(user['id'])
 
-    # 1. 블랙리스트 최우선 검증
+    # 1. 블랙리스트 검증 (차단된 사용자만 접근 거부)
     if user_id in [str(b) for b in db.get('user_blacklist', [])]:
         return jsonify({'error': 'Forbidden', 'reason': 'blacklisted'}), 403
 
-    # 2. 화이트리스트 및 어드민 검증
+    # 2. 화이트리스트가 아니어도 기본적으로 스태프 권한으로 접속 허용
     is_admin = user_id in [str(a) for a in db.get('admin_whitelist', [])]
-    is_whitelisted = user_id in [str(w) for w in db.get('user_whitelist', [])]
-
-    if not (is_admin or is_whitelisted):
-        return jsonify({'error': 'Forbidden', 'reason': 'not_whitelisted'}), 403
-
     role = 'admin' if is_admin else 'staff'
 
     return jsonify({
