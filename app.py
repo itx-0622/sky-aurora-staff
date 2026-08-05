@@ -15,7 +15,7 @@ app.secret_key = os.urandom(24)
 # ⚙️ 설정 및 환경 변수
 # ==========================================
 CLIENT_ID = "1534184089144266872"
-CLIENT_SECRET = "JcMp7ntF3Rx32ZYTRjyaYUWfmp0EU3co"
+CLIENT_SECRET = "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm"
 BASE_URL = "https://sky-aurora-staff.onrender.com"
 
 ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
