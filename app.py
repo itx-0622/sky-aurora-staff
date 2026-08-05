@@ -14,7 +14,7 @@ app.secret_key = os.urandom(24)
 # ==========================================
 CLIENT_ID = "1534184089144266872"
 CLIENT_SECRET = "JcMp7ntF3Rx32ZYTRjyaYUWfmp0EU3co"
-BASE_URL = "https://sky-aurora-admin.onrender.com"
+BASE_URL = "https://sky-aurora-staff.onrender.com"
 
 ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
 DATA_FILE = "sky_aurora_admin_data.json"
