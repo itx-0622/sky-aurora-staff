@@ -506,7 +506,6 @@ HTML_TEMPLATE = """
         }
     </style>
     <script>
-        // 🔒 우클릭, 드래그, 선택 완벽 차단
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('selectstart', e => e.preventDefault());
         document.addEventListener('dragstart', e => e.preventDefault());
@@ -521,7 +520,6 @@ HTML_TEMPLATE = """
             if (overlay) overlay.style.display = 'none';
         }
 
-        // 🔒 [PC] 단축키 시동(Shift, Win, Alt, Ctrl, PrintScreen) 즉시 화면 가림
         document.addEventListener('keydown', function(e) {
             if (
                 e.key === 'Shift' || e.key === 'Meta' || e.key === 'Alt' || 
@@ -545,7 +543,6 @@ HTML_TEMPLATE = """
             }
         });
 
-        // 🔒 [모바일/PC] 최근 앱 전환, 포커스 이탈, 알림창 내릴 때 가리기
         window.addEventListener('blur', triggerSecurityLock);
         window.addEventListener('focus', releaseSecurityLock);
         document.addEventListener('visibilitychange', function() {
@@ -563,7 +560,6 @@ HTML_TEMPLATE = """
             }
         });
 
-        // 🎬 매뉴얼 전환 애니메이션 함수 (내려가고 ➔ 새로 띄워지기)
         let isTransitioning = false;
 
         function selectManual(btnElement) {
@@ -574,7 +570,6 @@ HTML_TEMPLATE = """
 
             isTransitioning = true;
 
-            // 사이드바 버튼 active 상태 교체
             document.querySelectorAll('.aurora-btn-wrapper').forEach(w => w.classList.remove('active'));
             targetWrapper.classList.add('active');
 
@@ -585,11 +580,9 @@ HTML_TEMPLATE = """
             const titleEl = document.getElementById('doc-title');
             const bodyEl = document.getElementById('doc-body');
 
-            // 1단계: 기존 매뉴얼 내려가며 사라지기 (Exit 애니메이션)
             docWrapper.classList.remove('manual-enter');
             docWrapper.classList.add('manual-exit');
 
-            // 애니메이션(300ms) 완료 후 내용 변경 및 새로 올라오기 (Enter)
             setTimeout(() => {
                 titleEl.innerText = title;
                 bodyEl.innerText = content;
@@ -605,7 +598,6 @@ HTML_TEMPLATE = """
     </script>
 </head>
 <body>
-    <!-- 🔒 무단 캡처 경고 레이어 -->
     <div id="security-overlay">
         <div class="alert-icon">⚠️</div>
         <div class="alert-main-text">보안 경고: 무단 캡처 및 복제 금지</div>
@@ -675,7 +667,6 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // 🌌 오로라 Canvas 배경 애니메이션
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
 
@@ -805,7 +796,6 @@ def callback():
 
     discord_id = str(user_data.get('id', 'Unknown'))
     
-    # 🚫 [핵심 추가] 디스코드 사용자 ID가 블랙리스트에 등록되어 있는지 검증
     if discord_id in BLACKLIST_IDS:
         return render_template_string(
             HTML_TEMPLATE, 
@@ -866,9 +856,9 @@ def check_admin_auth():
     auth_key = request.headers.get('X-Admin-Key')
     return auth_key == ADMIN_SECRET_KEY
 
-# 1. 매뉴얼 목록 조회 / 추가 / 수정 / 삭제
 @app.route('/api/admin/manuals', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def api_admin_manuals():
+    global MANUALS
     if not check_admin_auth():
         return jsonify({"error": "Unauthorized"}), 401
 
@@ -876,7 +866,6 @@ def api_admin_manuals():
         return jsonify(MANUALS)
 
     elif request.method == 'POST':
-        # 매뉴얼 추가
         data = request.json
         new_id = max([m['id'] for m in MANUALS], default=0) + 1
         new_manual = {
@@ -888,7 +877,6 @@ def api_admin_manuals():
         return jsonify({"status": "success", "manual": new_manual})
 
     elif request.method == 'PUT':
-        # 매뉴얼 수정
         data = request.json
         target_id = data.get("id")
         for m in MANUALS:
@@ -899,13 +887,10 @@ def api_admin_manuals():
         return jsonify({"error": "Not found"}), 404
 
     elif request.method == 'DELETE':
-        # 매뉴얼 삭제
         manual_id = request.args.get('id', type=int)
-        global MANUALS
         MANUALS = [m for m in MANUALS if m['id'] != manual_id]
         return jsonify({"status": "success"})
 
-# 2. 블랙리스트 ID 조회 / 추가 / 삭제
 @app.route('/api/admin/blacklist', methods=['GET', 'POST', 'DELETE'])
 def api_admin_blacklist():
     if not check_admin_auth():
