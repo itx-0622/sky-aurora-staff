@@ -1,10 +1,16 @@
 import os
+import json
 import requests
 from datetime import datetime
 from flask import Flask, request, render_template_string, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
 app.secret_key = 'sky_aurora_secret_key_9988'
+
+# 파일 저장 경로 설정 (서버 재시작 시에도 유지)
+DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+MANUALS_FILE = os.path.join(DATA_DIR, 'manuals.json')
+BLACKLIST_FILE = os.path.join(DATA_DIR, 'blacklist.json')
 
 ACCESS_LOGS = []
 
@@ -14,25 +20,10 @@ ACCESS_LOGS = []
 OWNER_DISCORD_ID = "843621337066504225"
 ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
 
-# 블랙리스트 ID 목록 (메모리 저장)
-BLACKLIST_IDS = set()
-
 # --------------------------------------------------
-# 🔑 디스코드 OAuth2 설정
+# 📁 데이터 파일 저장 및 불러오기 함수
 # --------------------------------------------------
-DISCORD_CLIENT_ID = "1534184089144266872"
-DISCORD_CLIENT_SECRET = "JcMp7ntF3Rx32ZYTRjyaYUWfmp0EU3co"
-DISCORD_REDIRECT_URI = "https://sky-aurora-staff.onrender.com/callback"
-
-DISCORD_AUTH_URL = (
-    f"https://discord.com/api/oauth2/authorize"
-    f"?client_id={DISCORD_CLIENT_ID}"
-    f"&redirect_uri={DISCORD_REDIRECT_URI}"
-    f"&response_type=code"
-    f"&scope=identify%20email"
-)
-
-MANUALS = [
+DEFAULT_MANUALS = [
     {
         "id": 1,
         "title": "01. 기본 보안 지침",
@@ -50,10 +41,55 @@ MANUALS = [
     }
 ]
 
+def load_manuals():
+    if not os.path.exists(MANUALS_FILE):
+        save_manuals(DEFAULT_MANUALS)
+        return DEFAULT_MANUALS
+    try:
+        with open(MANUALS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return DEFAULT_MANUALS
+
+def save_manuals(data):
+    with open(MANUALS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def load_blacklist():
+    if not os.path.exists(BLACKLIST_FILE):
+        return []
+    try:
+        with open(BLACKLIST_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_blacklist(data):
+    with open(BLACKLIST_FILE, 'w', encoding='utf-8') as f:
+        json.dump(list(data), f, ensure_ascii=False, indent=4)
+
+# 메모리/파일 동기화 변수 초기화
+MANUALS = load_manuals()
+BLACKLIST_IDS = set(load_blacklist())
+
+# --------------------------------------------------
+# 🔑 디스코드 OAuth2 설정
+# --------------------------------------------------
+DISCORD_CLIENT_ID = "1534184089144266872"
+DISCORD_CLIENT_SECRET = "HRe8MKk_MY81RnMGIVJifNIByYDCq7es"
+DISCORD_REDIRECT_URI = "https://sky-aurora-staff.onrender.com/callback"
+
+DISCORD_AUTH_URL = (
+    f"https://discord.com/api/oauth2/authorize"
+    f"?client_id={DISCORD_CLIENT_ID}"
+    f"&redirect_uri={DISCORD_REDIRECT_URI}"
+    f"&response_type=code"
+    f"&scope=identify%20email"
+)
+
 def get_location_from_ip(ip_address):
     if ip_address in ['127.0.0.1', 'localhost', '::1']:
         return "로컬 접속 (관리자/테스트)"
-        
     try:
         url = f"http://ip-api.com/json/{ip_address}"
         res = requests.get(url, timeout=1).json()
@@ -162,7 +198,6 @@ HTML_TEMPLATE = """
             z-index: 1;
         }
 
-        /* 메인 컨테이너 카드 */
         .container {
             position: relative;
             z-index: 2;
@@ -240,7 +275,6 @@ HTML_TEMPLATE = """
             background: rgba(0, 255, 170, 0.1);
         }
 
-        /* 로그인 박스 파트 */
         .login-box {
             padding: 50px 28px;
             text-align: center;
@@ -282,7 +316,6 @@ HTML_TEMPLATE = """
             box-shadow: 0 8px 25px rgba(88, 101, 242, 0.7);
         }
 
-        /* 대시보드 레이아웃 */
         .dashboard {
             display: flex;
             flex: 1;
@@ -393,7 +426,6 @@ HTML_TEMPLATE = """
             position: relative;
         }
 
-        /* 🎬 매뉴얼 영역 애니메이션 클래스 */
         .doc-wrapper {
             display: flex;
             flex-direction: column;
@@ -467,7 +499,6 @@ HTML_TEMPLATE = """
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        /* 📱 모바일 반응형 디자인 */
         @media (max-width: 768px) {
             .container {
                 width: 95%;
@@ -614,9 +645,7 @@ HTML_TEMPLATE = """
             <h1>SKY AURORA STAFF 매뉴얼</h1>
             {% if authenticated %}
                 <div class="user-info">
-                    {% if avatar_url %}
-                        <img src="{{ avatar_url }}" alt="Avatar" class="avatar-img">
-                    {% endif %}
+                    <img src="{{ avatar_url }}" alt="Avatar" class="avatar-img" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
                     <span style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard';">
                         {{ username }}
                     </span>
@@ -745,13 +774,14 @@ HTML_TEMPLATE = """
 def index():
     is_auth = session.get('authenticated', False)
     username = session.get('username', '스태프')
-    avatar_url = session.get('avatar_url')
+    avatar_url = session.get('avatar_url') or 'https://cdn.discordapp.com/embed/avatars/0.png'
+    current_manuals = load_manuals()
     return render_template_string(
         HTML_TEMPLATE, 
         authenticated=is_auth, 
         username=username,
         avatar_url=avatar_url,
-        manuals=MANUALS
+        manuals=current_manuals
     )
 
 @app.route('/login/discord')
@@ -766,7 +796,7 @@ def callback():
             HTML_TEMPLATE, 
             authenticated=False, 
             error="❌ 디스코드 인증에 실패했습니다.",
-            manuals=MANUALS
+            manuals=load_manuals()
         )
 
     data = {
@@ -787,7 +817,7 @@ def callback():
             HTML_TEMPLATE, 
             authenticated=False, 
             error="❌ 토큰 발급에 실패했습니다.",
-            manuals=MANUALS
+            manuals=load_manuals()
         )
 
     user_headers = {'Authorization': f'Bearer {access_token}'}
@@ -796,20 +826,18 @@ def callback():
 
     discord_id = str(user_data.get('id', 'Unknown'))
     
-    if discord_id in BLACKLIST_IDS:
+    if discord_id in load_blacklist():
         return render_template_string(
             HTML_TEMPLATE, 
             authenticated=False, 
             error="❌ 차단된 사용자 계정입니다.",
-            manuals=MANUALS
+            manuals=load_manuals()
         )
 
     username = user_data.get('global_name') or user_data.get('username', 'Unknown')
     avatar_hash = user_data.get('avatar')
     
-    avatar_url = None
-    if avatar_hash:
-        avatar_url = f"https://cdn.discordapp.com/avatars/{discord_id}/{avatar_hash}.png"
+    avatar_url = f"https://cdn.discordapp.com/avatars/{discord_id}/{avatar_hash}.png" if avatar_hash else "https://cdn.discordapp.com/embed/avatars/0.png"
 
     user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     if user_ip and ',' in user_ip:
@@ -858,37 +886,41 @@ def check_admin_auth():
 
 @app.route('/api/admin/manuals', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def api_admin_manuals():
-    global MANUALS
     if not check_admin_auth():
         return jsonify({"error": "Unauthorized"}), 401
 
+    manuals = load_manuals()
+
     if request.method == 'GET':
-        return jsonify(MANUALS)
+        return jsonify(manuals)
 
     elif request.method == 'POST':
         data = request.json
-        new_id = max([m['id'] for m in MANUALS], default=0) + 1
+        new_id = max([m['id'] for m in manuals], default=0) + 1
         new_manual = {
             "id": new_id,
             "title": data.get("title", ""),
             "content": data.get("content", "")
         }
-        MANUALS.append(new_manual)
+        manuals.append(new_manual)
+        save_manuals(manuals)
         return jsonify({"status": "success", "manual": new_manual})
 
     elif request.method == 'PUT':
         data = request.json
         target_id = data.get("id")
-        for m in MANUALS:
+        for m in manuals:
             if m['id'] == target_id:
                 m['title'] = data.get("title", m['title'])
                 m['content'] = data.get("content", m['content'])
+                save_manuals(manuals)
                 return jsonify({"status": "success", "manual": m})
         return jsonify({"error": "Not found"}), 404
 
     elif request.method == 'DELETE':
         manual_id = request.args.get('id', type=int)
-        MANUALS = [m for m in MANUALS if m['id'] != manual_id]
+        manuals = [m for m in manuals if m['id'] != manual_id]
+        save_manuals(manuals)
         return jsonify({"status": "success"})
 
 @app.route('/api/admin/blacklist', methods=['GET', 'POST', 'DELETE'])
@@ -896,19 +928,23 @@ def api_admin_blacklist():
     if not check_admin_auth():
         return jsonify({"error": "Unauthorized"}), 401
 
+    blacklist = set(load_blacklist())
+
     if request.method == 'GET':
-        return jsonify(list(BLACKLIST_IDS))
+        return jsonify(list(blacklist))
 
     elif request.method == 'POST':
         discord_id = str(request.json.get('discord_id', '')).strip()
         if discord_id:
-            BLACKLIST_IDS.add(discord_id)
-            return jsonify({"status": "success", "blacklist": list(BLACKLIST_IDS)})
+            blacklist.add(discord_id)
+            save_blacklist(blacklist)
+            return jsonify({"status": "success", "blacklist": list(blacklist)})
 
     elif request.method == 'DELETE':
         discord_id = str(request.args.get('discord_id', '')).strip()
-        BLACKLIST_IDS.discard(discord_id)
-        return jsonify({"status": "success", "blacklist": list(BLACKLIST_IDS)})
+        blacklist.discard(discord_id)
+        save_blacklist(blacklist)
+        return jsonify({"status": "success", "blacklist": list(blacklist)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
