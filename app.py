@@ -8,8 +8,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
 
-# 프록시 및 헤더 설정 (Reverse Proxy 환경 대응)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+# 프록시 및 헤더 설정 (Reverse Proxy 환경 대응 - x_prefix 제외하여 404 왜곡 방지)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # ==========================================
 # ⚙️ 쿠키 및 세션 보안 설정
@@ -75,8 +75,8 @@ def load_data():
         }
 
     for admin_id in DEFAULT_ADMINS:
-        if admin_id not in data.get("admin_whitelist", []):
-            data.setdefault("admin_whitelist", []).append(admin_id)
+        if str(admin_id) not in [str(a) for a in data.get("admin_whitelist", [])]:
+            data.setdefault("admin_whitelist", []).append(str(admin_id))
 
     return data
 
@@ -442,7 +442,7 @@ MAIN_HTML_TEMPLATE = """
 
         async function syncSystemState() {
             try {
-                const res = await fetch('/api/state');
+                const res = await fetch(`${window.location.origin}/api/state`);
                 if (res.status === 403) {
                     const errData = await res.json();
                     document.getElementById('login-box').style.display = 'none';
@@ -532,147 +532,152 @@ MAIN_HTML_TEMPLATE = """
 
             const badge = document.getElementById('user-role-badge');
             if (data.role === 'admin') {
-                badge.className = 'badge-admin';
                 badge.innerText = 'ADMIN';
+                badge.className = 'badge-admin';
                 document.getElementById('admin-menu-section').style.display = 'block';
             } else {
-                badge.className = 'badge-staff';
                 badge.innerText = 'STAFF';
+                badge.className = 'badge-staff';
                 document.getElementById('admin-menu-section').style.display = 'none';
             }
 
             renderSidebarManuals();
-            renderManualDetail(selectedManualIndex);
-            if (data.role === 'admin') {
-                renderPermissionsList();
-                renderLogsList();
-            }
+            renderManualContent();
+            renderPermissionsLists();
+            renderAdminLogs();
         }
 
         function renderSidebarManuals() {
-            const sidebarContainer = document.getElementById('manual-sidebar-categorized');
-            sidebarContainer.innerHTML = '';
+            const container = document.getElementById('manual-sidebar-categorized');
+            container.innerHTML = '';
 
             const categories = {};
-            appState.manuals.forEach((m, index) => {
-                const cat = m.category || '일반 매뉴얼';
+            appState.manuals.forEach((m, idx) => {
+                const cat = m.category || '공통 매뉴얼';
                 if (!categories[cat]) categories[cat] = [];
-                categories[cat].push({ ...m, origIndex: index });
+                categories[cat].push({ ...m, index: idx });
             });
 
-            for (const cat in categories) {
+            for (const [catName, items] of Object.entries(categories)) {
                 const catTitle = document.createElement('div');
                 catTitle.className = 'sidebar-category-title';
-                catTitle.innerText = cat;
-                sidebarContainer.appendChild(catTitle);
+                catTitle.innerText = catName;
+                container.appendChild(catTitle);
 
-                categories[cat].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+                items.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
-                categories[cat].forEach(item => {
+                items.forEach(item => {
                     const wrapper = document.createElement('div');
-                    wrapper.className = `aurora-btn-wrapper ${item.origIndex === selectedManualIndex ? 'active' : ''}`;
-                    wrapper.id = `manual-nav-${item.origIndex}`;
+                    wrapper.className = `aurora-btn-wrapper ${item.index === selectedManualIndex ? 'active' : ''}`;
 
                     const btn = document.createElement('button');
                     btn.className = 'item-btn';
-                    btn.onclick = () => selectManual(item.origIndex);
                     btn.innerHTML = `<span>${item.pinned ? '<span class="pin-badge">📌</span>' : ''}${item.title}</span>`;
+                    btn.onclick = () => {
+                        selectedManualIndex = item.index;
+                        renderSidebarManuals();
+                        switchTab('view-manual');
+                        renderManualContent();
+                    };
 
                     wrapper.appendChild(btn);
-                    sidebarContainer.appendChild(wrapper);
+                    container.appendChild(wrapper);
                 });
             }
         }
 
-        function selectManual(index) {
-            selectedManualIndex = index;
-            document.querySelectorAll('.aurora-btn-wrapper').forEach(el => el.classList.remove('active'));
-            const activeNav = document.getElementById(`manual-nav-${index}`);
-            if (activeNav) activeNav.classList.add('active');
+        function renderManualContent() {
+            const manual = appState.manuals[selectedManualIndex];
+            if (manual) {
+                document.getElementById('doc-title').innerText = manual.title;
+                document.getElementById('doc-body').innerText = manual.content;
 
-            switchTab('view-manual');
-            renderManualDetail(index);
-
-            if (appState.role === 'admin') {
-                const m = appState.manuals[index];
-                if (m) {
-                    document.getElementById('m-edit-category').value = m.category || '';
-                    document.getElementById('m-edit-pinned').checked = !!m.pinned;
-                    document.getElementById('m-edit-title').value = m.title || '';
-                    document.getElementById('m-edit-content').value = m.content || '';
-                }
+                document.getElementById('m-edit-category').value = manual.category || '';
+                document.getElementById('m-edit-title').value = manual.title || '';
+                document.getElementById('m-edit-content').value = manual.content || '';
+                document.getElementById('m-edit-pinned').checked = !!manual.pinned;
+            } else {
+                document.getElementById('doc-title').innerText = '매뉴얼이 없습니다.';
+                document.getElementById('doc-body').innerText = '등록된 매뉴얼 항목이 존재하지 않습니다.';
             }
         }
 
-        function renderManualDetail(index) {
-            const docTitle = document.getElementById('doc-title');
-            const docBody = document.getElementById('doc-body');
-            const m = appState.manuals[index];
+        function renderPermissionsLists() {
+            const wlUl = document.getElementById('perm-wl-list');
+            const blUl = document.getElementById('perm-bl-list');
+            wlUl.innerHTML = '';
+            blUl.innerHTML = '';
 
-            if (m) {
-                docTitle.innerText = m.title;
-                docBody.innerText = m.content;
-            } else {
-                docTitle.innerText = '선택된 매뉴얼이 없습니다.';
-                docBody.innerText = '왼쪽 메뉴에서 매뉴얼을 선택하세요.';
-            }
+            appState.user_whitelist.forEach(id => {
+                const isAdmin = appState.admin_whitelist.includes(String(id));
+                const li = document.createElement('li');
+                li.innerHTML = `<span>ID: ${id} ${isAdmin ? '<strong style="color:#ff2d55;">(ADMIN)</strong>' : ''}</span>
+                                <button onclick="removePermission('${id}', 'whitelist')" class="btn-ui btn-danger" style="padding:4px 8px; font-size:11px;">제거</button>`;
+                wlUl.appendChild(li);
+            });
+
+            appState.user_blacklist.forEach(id => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>ID: ${id}</span>
+                                <button onclick="removePermission('${id}', 'blacklist')" class="btn-ui" style="padding:4px 8px; font-size:11px;">해제</button>`;
+                blUl.appendChild(li);
+            });
+        }
+
+        function renderAdminLogs() {
+            const logBox = document.getElementById('admin-log-box');
+            logBox.innerHTML = appState.logs.map(log => `<div>${log}</div>`).join('');
         }
 
         function switchTab(tabId) {
             if (currentActiveTabId === tabId) return;
-            const currentTab = document.getElementById(currentActiveTabId);
-            const nextTab = document.getElementById(tabId);
+            const currentEl = document.getElementById(currentActiveTabId);
+            const targetEl = document.getElementById(tabId);
 
-            if (currentTab) {
-                currentTab.className = 'tab-leave';
+            document.querySelectorAll('.aurora-btn-wrapper').forEach(el => el.classList.remove('active'));
+
+            if (currentEl) {
+                currentEl.classList.remove('tab-enter');
+                currentEl.classList.add('tab-leave');
                 setTimeout(() => {
-                    currentTab.style.display = 'none';
-                    nextTab.style.display = 'block';
-                    nextTab.className = 'tab-enter';
+                    currentEl.style.display = 'none';
+                    currentEl.classList.remove('tab-leave');
+                    targetEl.style.display = 'block';
+                    targetEl.classList.add('tab-enter');
                     currentActiveTabId = tabId;
                 }, 200);
-            } else {
-                nextTab.style.display = 'block';
-                nextTab.className = 'tab-enter';
-                currentActiveTabId = tabId;
             }
         }
 
-        function switchAdminTab(type) {
-            document.querySelectorAll('.admin-nav').forEach(el => el.classList.remove('active'));
-            const navBtn = document.getElementById(`nav-${type}`);
-            if (navBtn) navBtn.classList.add('active');
-
-            if (type === 'm-manage') switchTab('view-admin-m-manage');
-            else if (type === 'permissions') switchTab('view-admin-permissions');
-            else if (type === 'logs') switchTab('view-admin-logs');
+        function switchAdminTab(adminType) {
+            const navWrapper = document.getElementById(`nav-${adminType}`);
+            switchTab(`view-admin-${adminType}`);
+            if (navWrapper) navWrapper.classList.add('active');
         }
 
         async function saveManualData() {
             const category = document.getElementById('m-edit-category').value.trim();
-            const pinned = document.getElementById('m-edit-pinned').checked;
             const title = document.getElementById('m-edit-title').value.trim();
             const content = document.getElementById('m-edit-content').value.trim();
+            const pinned = document.getElementById('m-edit-pinned').checked;
 
             if (!title || !content) { alert('제목과 내용을 입력해주세요.'); return; }
 
-            const res = await fetch('/api/manual/save', {
+            const res = await fetch(`${window.location.origin}/api/manual/save`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index: selectedManualIndex, category, pinned, title, content })
+                body: JSON.stringify({ index: selectedManualIndex, category, title, content, pinned })
             });
 
             if (res.ok) {
                 alert('매뉴얼이 저장되었습니다.');
                 syncSystemState();
-            } else {
-                alert('저장 실패');
-            }
+            } else { alert('저장에 실패했습니다.'); }
         }
 
         async function deleteManualData() {
-            if (!confirm('현재 선택된 매뉴얼을 삭제하시겠습니까?')) return;
-            const res = await fetch('/api/manual/delete', {
+            if (!confirm('정말 삭제하시겠습니까?')) return;
+            const res = await fetch(`${window.location.origin}/api/manual/delete`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ index: selectedManualIndex })
@@ -682,36 +687,44 @@ MAIN_HTML_TEMPLATE = """
                 alert('매뉴얼이 삭제되었습니다.');
                 selectedManualIndex = 0;
                 syncSystemState();
-            } else {
-                alert('삭제 실패');
-            }
+            } else { alert('삭제에 실패했습니다.'); }
         }
 
         function resetManualForm() {
-            selectedManualIndex = -1;
+            selectedManualIndex = appState.manuals.length;
             document.getElementById('m-edit-category').value = '';
-            document.getElementById('m-edit-pinned').checked = false;
             document.getElementById('m-edit-title').value = '';
             document.getElementById('m-edit-content').value = '';
-            switchTab('view-admin-m-manage');
+            document.getElementById('m-edit-pinned').checked = false;
         }
 
         async function searchUser() {
             const query = document.getElementById('perm-search-input').value.trim();
-            if (!query) return;
+            if (!query) { alert('검색할 디스코드 ID 또는 사용자명을 입력하세요.'); return; }
 
-            const res = await fetch(`/api/user/search?query=${encodeURIComponent(query)}`);
-            if (res.ok) {
-                const data = await res.json();
-                searchedTargetUser = data;
-                document.getElementById('user-search-result').style.display = 'flex';
-                document.getElementById('preview-avatar').src = data.avatar ? `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png';
-                document.getElementById('preview-global-name').innerText = data.global_name || data.username;
-                document.getElementById('preview-username').innerText = `@${data.username}`;
-                document.getElementById('preview-id').innerText = `ID: ${data.id}`;
-            } else {
-                alert('사용자를 찾을 수 없습니다.');
-            }
+            try {
+                const res = await fetch(`${window.location.origin}/api/user/lookup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+
+                if (res.ok) {
+                    const user = await res.json();
+                    searchedTargetUser = user;
+                    document.getElementById('preview-global-name').innerText = user.global_name || user.username;
+                    document.getElementById('preview-username').innerText = `@${user.username}`;
+                    document.getElementById('preview-id').innerText = `ID: ${user.id}`;
+                    document.getElementById('preview-avatar').src = user.avatar 
+                        ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` 
+                        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+                    document.getElementById('user-search-result').style.display = 'flex';
+                } else {
+                    alert('사용자를 찾을 수 없습니다.');
+                    document.getElementById('user-search-result').style.display = 'none';
+                    searchedTargetUser = null;
+                }
+            } catch(e) { alert('조회 중 오류가 발생했습니다.'); }
         }
 
         async function applyPermission(actionType) {
@@ -721,65 +734,33 @@ MAIN_HTML_TEMPLATE = """
 
             if (!targetId) { alert('유효한 디스코드 ID를 입력하세요.'); return; }
 
-            const res = await fetch('/api/permission/apply', {
+            const res = await fetch(`${window.location.origin}/api/permission/apply`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target_id: targetId, action: actionType, role: role })
+                body: JSON.stringify({ target_id: String(targetId), action: actionType, role: role })
             });
 
             if (res.ok) {
-                alert('권한이 변경되었습니다.');
+                alert('권한 상태가 정상 변경되었습니다.');
                 syncSystemState();
             } else {
-                alert('권한 변경 실패');
+                const err = await res.json().catch(() => ({}));
+                alert(`권한 변경 실패 (오류: ${res.status}) ${err.error || ''}`);
             }
         }
 
         async function removePermission(targetId, listType) {
             if (!confirm(`사용자(${targetId})를 ${listType} 목록에서 제거하시겠습니까?`)) return;
 
-            const res = await fetch('/api/permission/remove', {
+            const res = await fetch(`${window.location.origin}/api/permission/remove`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target_id: targetId, list_type: listType })
+                body: JSON.stringify({ target_id: String(targetId), list_type: listType })
             });
 
             if (res.ok) {
                 syncSystemState();
-            } else {
-                alert('제거 실패');
-            }
-        }
-
-        function renderPermissionsList() {
-            const wlList = document.getElementById('perm-wl-list');
-            const blList = document.getElementById('perm-bl-list');
-
-            wlList.innerHTML = '';
-            blList.innerHTML = '';
-
-            const allWl = [...(appState.user_whitelist || [])];
-            (appState.admin_whitelist || []).forEach(a => { if (!allWl.includes(a)) allWl.push(a); });
-
-            allWl.forEach(id => {
-                const isAdmin = (appState.admin_whitelist || []).includes(id);
-                const li = document.createElement('li');
-                li.innerHTML = `<span>ID: ${id} ${isAdmin ? '<b style="color:#ff2d55;">[ADMIN]</b>' : '[STAFF]'}</span>
-                                <button onclick="removePermission('${id}', 'whitelist')" class="btn-ui btn-danger" style="padding:4px 8px; font-size:11px;">제거</button>`;
-                wlList.appendChild(li);
-            });
-
-            (appState.user_blacklist || []).forEach(id => {
-                const li = document.createElement('li');
-                li.innerHTML = `<span>ID: ${id}</span>
-                                <button onclick="removePermission('${id}', 'blacklist')" class="btn-ui btn-secondary" style="padding:4px 8px; font-size:11px;">해제</button>`;
-                blList.appendChild(li);
-            });
-        }
-
-        function renderLogsList() {
-            const logBox = document.getElementById('admin-log-box');
-            logBox.innerHTML = (appState.logs || []).map(l => `<div style="margin-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.02); padding-bottom:4px;">${l}</div>`).join('');
+            } else { alert('제거에 실패했습니다.'); }
         }
 
         window.onload = syncSystemState;
@@ -789,10 +770,181 @@ MAIN_HTML_TEMPLATE = """
 """
 
 # ==========================================
-# 🌐 Web App API Routes & Auth Logic
+# 🔌 API 라우트 및 컨트롤러
 # ==========================================
 
-@app.route('/api/permission/apply', methods=['POST'])
+@app.route('/')
+def index():
+    return render_template_string(MAIN_HTML_TEMPLATE, CLIENT_ID=CLIENT_ID)
+
+@app.route('/callback')
+def callback():
+    code = request.args.get('code')
+    if not code:
+        return redirect(url_for('index'))
+
+    redirect_uri = request.host_url.rstrip('/') + '/callback'
+    token_url = 'https://discord.com/api/oauth2/token'
+    data = {
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': redirect_uri
+    }
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+
+    try:
+        res = requests.post(token_url, data=data, headers=headers, timeout=5)
+        res_data = res.json()
+        access_token = res_data.get('access_token')
+
+        if not access_token:
+            return redirect(url_for('index'))
+
+        user_res = requests.get('https://discord.com/api/users/@me', headers={'Authorization': f'Bearer {access_token}'}, timeout=5)
+        user_data = user_res.json()
+
+        session['user'] = user_data
+        session.permanent = True
+
+        # 접속 로그 기록
+        db = load_data()
+        user_name = user_data.get('global_name') or user_data.get('username')
+        add_log(db, "AUTH", user_name, "시스템 로그인")
+        save_data(db)
+
+    except Exception as e:
+        print(f"[Auth Error] {e}")
+
+    return redirect(url_for('index'))
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+
+@app.route('/api/state', methods=['GET'], strict_slashes=False)
+def api_state():
+    user = session.get('user')
+    if not user:
+        return jsonify({'status': 'unauthorized'}), 200
+
+    db = load_data()
+    user_id = str(user['id'])
+
+    # 블랙리스트 검증
+    if user_id in [str(b) for b in db.get('user_blacklist', [])]:
+        return jsonify({'error': 'Forbidden', 'reason': 'blacklisted'}), 403
+
+    # 최고 관리자 및 화이트리스트 접근 권한 검증
+    is_admin = user_id in [str(a) for a in db.get('admin_whitelist', [])]
+    is_whitelisted = user_id in [str(w) for w in db.get('user_whitelist', [])]
+
+    if not (is_admin or is_whitelisted):
+        return jsonify({'error': 'Forbidden', 'reason': 'not_whitelisted'}), 403
+
+    role = 'admin' if is_admin else 'staff'
+
+    return jsonify({
+        'status': 'success',
+        'user': user,
+        'role': role,
+        'manuals': db.get('manuals', []),
+        'user_whitelist': db.get('user_whitelist', []),
+        'user_blacklist': db.get('user_blacklist', []),
+        'admin_whitelist': db.get('admin_whitelist', []),
+        'logs': db.get('logs', []) if is_admin else []
+    })
+
+@app.route('/api/user/lookup', methods=['POST'], strict_slashes=False)
+def api_user_lookup():
+    user = session.get('user')
+    if not user: 
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    req_data = request.get_json() or {}
+    query = str(req_data.get('query', '')).strip().lstrip('@')
+
+    if not query: 
+        return jsonify({'error': 'Query required'}), 400
+
+    # 1. 숫자로 된 사용자 ID 파싱 시도
+    if query.isdigit():
+        if BOT_TOKEN:
+            try:
+                res = requests.get(f"https://discord.com/api/v10/users/{query}", headers={"Authorization": f"Bot {BOT_TOKEN}"}, timeout=5)
+                if res.status_code == 200:
+                    return jsonify(res.json())
+            except Exception:
+                pass
+        return jsonify({"id": query, "username": f"User_{query}", "global_name": f"사용자 ({query})", "avatar": None})
+
+    return jsonify({'error': 'User not found'}), 404
+
+@app.route('/api/manual/save', methods=['POST'], strict_slashes=False)
+def api_manual_save():
+    user = session.get('user')
+    if not user: 
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    db = load_data()
+    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
+        return jsonify({'error': 'Forbidden'}), 403
+
+    req_data = request.get_json() or {}
+    index = req_data.get('index')
+    category = req_data.get('category', '공통 매뉴얼')
+    title = req_data.get('title')
+    content = req_data.get('content')
+    pinned = req_data.get('pinned', False)
+
+    manuals = db.get('manuals', [])
+    manual_entry = {
+        'id': len(manuals) + 1 if index >= len(manuals) else manuals[index].get('id', index + 1),
+        'category': category,
+        'title': title,
+        'content': content,
+        'pinned': pinned
+    }
+
+    if index is not None and 0 <= index < len(manuals):
+        manuals[index] = manual_entry
+    else:
+        manuals.append(manual_entry)
+
+    db['manuals'] = manuals
+    user_name = user.get('global_name') or user.get('username')
+    add_log(db, "MANUAL", user_name, f"매뉴얼 저장/수정 ('{title}')")
+    save_data(db)
+
+    return jsonify({'status': 'success'})
+
+@app.route('/api/manual/delete', methods=['POST'], strict_slashes=False)
+def api_manual_delete():
+    user = session.get('user')
+    if not user: 
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    db = load_data()
+    if str(user['id']) not in [str(a) for a in db.get('admin_whitelist', [])]:
+        return jsonify({'error': 'Forbidden'}), 403
+
+    req_data = request.get_json() or {}
+    index = req_data.get('index')
+    manuals = db.get('manuals', [])
+
+    if index is not None and 0 <= index < len(manuals):
+        deleted = manuals.pop(index)
+        db['manuals'] = manuals
+        user_name = user.get('global_name') or user.get('username')
+        add_log(db, "MANUAL", user_name, f"매뉴얼 삭제 ('{deleted.get('title')}')")
+        save_data(db)
+        return jsonify({'status': 'success'})
+
+    return jsonify({'error': 'Invalid index'}), 400
+
+@app.route('/api/permission/apply', methods=['POST'], strict_slashes=False)
 def api_permission_apply():
     user = session.get('user')
     if not user: 
@@ -812,39 +964,31 @@ def api_permission_apply():
 
     user_name = user.get('global_name') or user.get('username')
 
-    # 리스트 데이터 타입 안전성 확보 (모두 문자열로 변환)
+    # 리스트 데이터 정제 (모두 문자열로 통일)
     db['user_whitelist'] = [str(x) for x in db.get('user_whitelist', [])]
     db['admin_whitelist'] = [str(x) for x in db.get('admin_whitelist', [])]
     db['user_blacklist'] = [str(x) for x in db.get('user_blacklist', [])]
 
     if action == 'add':
-        # 블랙리스트에 존재하면 제거
         if target_id in db['user_blacklist']:
             db['user_blacklist'].remove(target_id)
-        
-        # 화이트리스트 추가
         if target_id not in db['user_whitelist']:
             db['user_whitelist'].append(target_id)
 
-        # 어드민 권한 부여 시 admin_whitelist에도 추가
         if role == 'admin':
             if target_id not in db['admin_whitelist']:
                 db['admin_whitelist'].append(target_id)
             add_log(db, "PERMISSION", user_name, f"어드민 권한 부여 (ID: {target_id})")
         else:
-            # 스태프로 변경 시 어드민 명단에서 제거 (기본 어드민 제외)
             if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
                 db['admin_whitelist'].remove(target_id)
             add_log(db, "PERMISSION", user_name, f"스태프 권한 부여 (ID: {target_id})")
 
     elif action == 'blacklist':
-        # 화이트리스트 및 어드민 명단에서 제거
         if target_id in db['user_whitelist']:
             db['user_whitelist'].remove(target_id)
         if target_id in db['admin_whitelist'] and target_id not in DEFAULT_ADMINS:
             db['admin_whitelist'].remove(target_id)
-        
-        # 블랙리스트 추가
         if target_id not in db['user_blacklist']:
             db['user_blacklist'].append(target_id)
         add_log(db, "PERMISSION", user_name, f"블랙리스트 추가 (ID: {target_id})")
@@ -852,8 +996,7 @@ def api_permission_apply():
     save_data(db)
     return jsonify({'status': 'success'})
 
-
-@app.route('/api/permission/remove', methods=['POST'])
+@app.route('/api/permission/remove', methods=['POST'], strict_slashes=False)
 def api_permission_remove():
     user = session.get('user')
     if not user: 
@@ -872,7 +1015,6 @@ def api_permission_remove():
 
     user_name = user.get('global_name') or user.get('username')
 
-    # 리스트 데이터 타입 안전성 확보
     db['user_whitelist'] = [str(x) for x in db.get('user_whitelist', [])]
     db['admin_whitelist'] = [str(x) for x in db.get('admin_whitelist', [])]
     db['user_blacklist'] = [str(x) for x in db.get('user_blacklist', [])]
@@ -893,6 +1035,4 @@ def api_permission_remove():
     return jsonify({'status': 'success'})
 
 if __name__ == '__main__':
-    # 로컬 테스트 및 배포 실행
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=True)
