@@ -21,7 +21,7 @@ BLACKLIST_IDS = set()
 # 🔑 디스코드 OAuth2 설정
 # --------------------------------------------------
 DISCORD_CLIENT_ID = "1534184089144266872"
-DISCORD_CLIENT_SECRET = "ekHMzJEF519uQiAn94PuOPxER-51IH5s"
+DISCORD_CLIENT_SECRET = "HRe8MKk_MY81RnMGIVJifNIByYDCq7es"
 DISCORD_REDIRECT_URI = "https://sky-aurora-staff.onrender.com/callback"
 
 DISCORD_AUTH_URL = (
