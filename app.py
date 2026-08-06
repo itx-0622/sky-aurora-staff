@@ -84,7 +84,7 @@ def save_data(data):
             sha = get_res.json().get("sha") if get_res.status_code == 200 else None
             
             json_str = json.dumps(data, ensure_ascii=False, indent=2)
-            encoded_content = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
+            encoded_content = base64.b64decode(json_str.encode('utf-8')).decode('utf-8')
             
             payload = {
                 "message": f"Auto-sync manual data [{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
@@ -156,38 +156,26 @@ MAIN_HTML_TEMPLATE = """
             background: #030509; z-index: 99999; display: flex; flex-direction: column;
             justify-content: center; align-items: center; opacity: 1; transition: opacity 0.8s ease;
         }
+        
+        /* 롤백된 링 대신 아바타 오로라 오라 펄스 연출 */
         .intro-circle-container {
-            position: relative; width: 140px; height: 140px; display: flex;
+            position: relative; width: 120px; height: 120px; display: flex;
             justify-content: center; align-items: center; margin-bottom: 24px;
         }
-        .intro-ring {
+        .intro-aura-glow {
             position: absolute; width: 100%; height: 100%; border-radius: 50%;
-            border: 2px solid transparent; border-top-color: #00ffaa; border-right-color: #00f2fe;
-            animation: spinRing 1s linear infinite; opacity: 0.5; transition: all 0.5s ease;
+            background: radial-gradient(circle, rgba(0,255,170,0.6) 0%, rgba(0,242,254,0.2) 60%, transparent 100%);
+            animation: auraPulse 2s ease-in-out infinite alternate; filter: blur(10px);
         }
-        
-        /* 펄스 확장 및 동적 생성 오로라 링 스타일 */
-        .intro-circle-container.pulse-active {
-            animation: containerPulse 1.6s ease-in-out infinite alternate;
-        }
-        @keyframes containerPulse {
-            0% { transform: scale(0.95); }
-            100% { transform: scale(1.25); }
+        @keyframes auraPulse {
+            0% { transform: scale(0.85); opacity: 0.4; }
+            100% { transform: scale(1.35); opacity: 0.9; }
         }
 
-        .extra-aurora-ring {
-            position: absolute; border-radius: 50%; border: 1.5px solid rgba(0, 255, 170, 0.6);
-            box-shadow: 0 0 15px rgba(0, 255, 170, 0.3); pointer-events: none;
-            animation: extraRingSpin 2s linear infinite;
-        }
-        @keyframes extraRingSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        @keyframes spinRing { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
         .intro-avatar {
             width: 100px; height: 100px; border-radius: 50%; object-fit: cover;
             opacity: 0; transform: scale(0.6); transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-            border: 2px solid #00ffaa; box-shadow: 0 0 20px rgba(0,255,170,0.5); z-index: 2;
+            border: 2px solid #00ffaa; box-shadow: 0 0 25px rgba(0,255,170,0.6); z-index: 2;
         }
         .intro-avatar.show { opacity: 1; transform: scale(1); }
         .intro-progress-text { font-size: 28px; color: #00ffaa; font-family: 'GmarketSansBold'; letter-spacing: 1px; }
@@ -229,8 +217,8 @@ MAIN_HTML_TEMPLATE = """
         .aurora-btn-wrapper.active .item-btn { color: #ffffff; background: rgba(6, 24, 38, 0.95); font-weight: bold; }
         .pin-badge { font-size: 11px; margin-right: 4px; }
 
-        .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; }
-        .content-card { background: rgba(5, 8, 17, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; }
+        .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; scroll-behavior: smooth; }
+        .content-card { background: rgba(5, 8, 17, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; margin-bottom: 20px; }
         
         .doc-title { font-size: 20px; margin-bottom: 16px; color: #ffffff; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 12px; display: flex; align-items: center; gap: 10px; }
         .doc-title::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
@@ -238,9 +226,22 @@ MAIN_HTML_TEMPLATE = """
 
         input, textarea, select { width: 100%; background: rgba(3, 5, 9, 0.8); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.12); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; }
         input:focus, textarea:focus, select:focus { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
-        .btn-ui { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif; transition: all 0.2s ease; }
-        .btn-ui:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4); }
+
+        /* 버튼 호버 링 효과 및 오로라 스타일 적용 */
+        .btn-ui {
+            position: relative; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none;
+            padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif;
+            transition: all 0.25s ease; outline: none; overflow: hidden;
+        }
+        .btn-ui::after {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(0, 255, 170, 0.3) 0%, transparent 70%);
+            opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+        }
+        .btn-ui:hover { transform: translateY(-2px); box-shadow: 0 0 15px rgba(0, 255, 170, 0.5), 0 0 30px rgba(0, 242, 254, 0.3); }
+        .btn-ui:hover::after { opacity: 1; }
         .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+        .btn-danger:hover { box-shadow: 0 0 15px rgba(255, 45, 85, 0.6); }
         .btn-secondary { background: linear-gradient(135deg, #475569, #334155); }
 
         ul.data-list { list-style: none; padding: 0; }
@@ -248,7 +249,7 @@ MAIN_HTML_TEMPLATE = """
 
         /* 디스코드 태그 추천 팝업 UI */
         .mention-dropdown {
-            position: absolute; top: 75px; left: 24px; right: 24px; z-index: 1000;
+            position: absolute; top: 45px; left: 0; right: 0; z-index: 1000;
             background: rgba(15, 23, 42, 0.98); border: 1px solid #00ffaa; border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8); display: none; max-height: 180px; overflow-y: auto;
         }
@@ -257,13 +258,6 @@ MAIN_HTML_TEMPLATE = """
         }
         .mention-item:hover { background: rgba(0, 255, 170, 0.15); }
         .mention-avatar { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #00ffaa; }
-
-        /* 선택된 유저 프로필 태그 카운터 카드 */
-        .user-profile-tag {
-            display: flex; align-items: center; gap: 12px; background: rgba(0, 255, 170, 0.1);
-            border: 1px solid rgba(0, 255, 170, 0.4); padding: 10px 14px; border-radius: 12px; margin-bottom: 12px;
-        }
-        .user-profile-tag img { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid #00ffaa; }
 
         .tab-enter { animation: manualEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .tab-leave { animation: manualLeave 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
@@ -304,7 +298,6 @@ MAIN_HTML_TEMPLATE = """
         function triggerSecurityLock() { const overlay = document.getElementById('security-overlay'); if (overlay) overlay.style.display = 'flex'; }
         function releaseSecurityLock() { const overlay = document.getElementById('security-overlay'); if (overlay) overlay.style.display = 'none'; }
 
-        // 감지 및 캡처 감지 개선 (Ctrl+C, Ctrl+V, Win+Shift+S, PrintScreen 대응)
         document.addEventListener('keydown', function(e) {
             if (e.key === 'PrintScreen' || e.key === 'F12') { 
                 triggerSecurityLock();
@@ -349,7 +342,6 @@ MAIN_HTML_TEMPLATE = """
         <div class="alert-sub-text">시스템 정보의 무단 촬영 및 복제 시도는 금지되어 있습니다.</div>
     </div>
 
-    <!-- 자체 시스템 라이트 커스텀 알림 모달 -->
     <div id="custom-notification">
         <span style="font-size:18px;">🌌</span>
         <span id="custom-notification-text">알림 메세지</span>
@@ -357,7 +349,7 @@ MAIN_HTML_TEMPLATE = """
 
     <div id="intro-overlay" style="display:none;">
         <div id="intro-container" class="intro-circle-container">
-            <div id="intro-ring" class="intro-ring"></div>
+            <div class="intro-aura-glow"></div>
             <img id="intro-avatar-img" class="intro-avatar" src="" alt="User Avatar">
         </div>
         <div id="intro-progress" class="intro-progress-text">0%</div>
@@ -402,7 +394,7 @@ MAIN_HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <div class="main-content">
+            <div class="main-content" id="main-content-area">
                 <div id="view-manual" class="tab-enter" style="display:block;">
                     <div id="doc-title" class="doc-title">매뉴얼 선택 중...</div>
                     <div id="doc-body" class="doc-body"></div>
@@ -410,8 +402,7 @@ MAIN_HTML_TEMPLATE = """
 
                 <div id="view-admin-m-manage" class="tab-enter" style="display:none;">
                     <div class="doc-title">매뉴얼 신규 등록 및 작성</div>
-                    <div class="content-card">
-                        <!-- 매뉴얼 선택 수정 드롭다운 추가 -->
+                    <div class="content-card" id="manual-edit-card">
                         <div style="margin-bottom:12px;">
                             <label style="font-size:12px; color:#00ffaa; font-family:'Pretendard'; font-weight:bold; display:block; margin-bottom:4px;">수정할 매뉴얼 선택</label>
                             <select id="m-select-edit" onchange="onManualSelectToEdit(this.value)">
@@ -438,25 +429,15 @@ MAIN_HTML_TEMPLATE = """
 
                 <div id="view-admin-permissions" class="tab-enter" style="display:none;">
                     <div class="doc-title">스태프 접근 권한 관리</div>
+                    
                     <div class="content-card" style="margin-bottom:20px;">
                         <div style="position:relative;">
                             <input type="text" id="perm-target-id" placeholder="대상 디스코드 ID 또는 @사용자이름 입력" style="margin-bottom:8px;" oninput="onUserIdInput(this.value)">
-                            
-                            <!-- @태그 자동완성 드롭다운 -->
                             <div id="mention-dropdown" class="mention-dropdown"></div>
-
-                            <!-- 선택된 유저 프로필 카드 영역 -->
-                            <div id="selected-user-card" style="display:none;" class="user-profile-tag">
-                                <img id="sel-card-img" src="" alt="">
-                                <div>
-                                    <div id="sel-card-name" style="font-weight:bold; font-size:14px; color:#00ffaa;"></div>
-                                    <div id="sel-card-id" style="font-size:11px; color:#8a99ad; font-family:monospace;"></div>
-                                </div>
-                            </div>
 
                             <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
                                 <label style="display:flex; align-items:center; gap:6px; font-family:'Pretendard'; font-size:13px; color:#38bdf8; cursor:pointer;">
-                                    <input type="checkbox" id="perm-is-admin" style="width:auto; margin:0;"> 👑 어드민 권한도 함께 부여
+                                    <input type="checkbox" id="perm-is-admin" style="width:auto; margin:0;"> 👑 어드민 권한 부여
                                 </label>
                                 <div style="display:flex; gap:10px;">
                                     <button onclick="updatePermission('whitelist', 'add')" class="btn-ui">화이트리스트 추가</button>
@@ -466,13 +447,34 @@ MAIN_HTML_TEMPLATE = """
                         </div>
                     </div>
 
+                    <!-- 다중 사용자 일괄 처리 어드민 제어 패널 -->
+                    <div class="content-card" style="margin-bottom:20px;">
+                        <h3 style="font-size:14px; color:#00ffaa; margin-bottom:10px;">⚡ 선택 유저 일괄 제어</h3>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <button onclick="batchAction('admin_upgrade')" class="btn-ui">👑 선택 어드민 승격</button>
+                            <button onclick="batchAction('admin_demote')" class="btn-ui btn-secondary">👑 어드민 권한 취소</button>
+                            <button onclick="batchAction('blacklist')" class="btn-ui btn-danger">🚫 선택 블랙리스트 차단</button>
+                            <button onclick="batchAction('remove')" class="btn-ui btn-secondary">🗑️ 목록에서 일괄 제거</button>
+                        </div>
+                    </div>
+
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
                         <div class="content-card">
-                            <h3 style="color:#4ade80; margin-bottom:12px; font-size:15px;">화이트리스트 목록</h3>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <h3 style="color:#4ade80; font-size:15px;">화이트리스트 목록</h3>
+                                <label style="font-size:12px; font-family:'Pretendard'; color:#8a99ad; cursor:pointer;">
+                                    <input type="checkbox" onclick="toggleSelectAll('wl-check', this.checked)" style="width:auto;"> 전체 선택
+                                </label>
+                            </div>
                             <ul id="perm-wl-list" class="data-list"></ul>
                         </div>
                         <div class="content-card">
-                            <h3 style="color:#f87171; margin-bottom:12px; font-size:15px;">블랙리스트 목록</h3>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <h3 style="color:#f87171; font-size:15px;">블랙리스트 목록</h3>
+                                <label style="font-size:12px; font-family:'Pretendard'; color:#8a99ad; cursor:pointer;">
+                                    <input type="checkbox" onclick="toggleSelectAll('bl-check', this.checked)" style="width:auto;"> 전체 선택
+                                </label>
+                            </div>
                             <ul id="perm-bl-list" class="data-list"></ul>
                         </div>
                     </div>
@@ -517,11 +519,10 @@ MAIN_HTML_TEMPLATE = """
         }
         animate();
 
-        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], logs: [] };
+        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], logs: [] };
         let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
-        let selectedMentionUser = null;
 
         async function syncSystemState() {
             try {
@@ -550,20 +551,17 @@ MAIN_HTML_TEMPLATE = """
             } catch(e) { console.error("Sync error:", e); }
         }
 
-        // 인트로 애니메이션 (랜덤 3~5초 / 오로라 링 다중 생성 연출)
+        // 인트로 연출 (대체 애니메이션 오라)
         function runCustomIntro(nickname, username, avatarUrl, onComplete) {
             const introOverlay = document.getElementById('intro-overlay');
-            const introContainer = document.getElementById('intro-container');
             const introProgress = document.getElementById('intro-progress');
-            const introRing = document.getElementById('intro-ring');
             const introAvatar = document.getElementById('intro-avatar-img');
             const introWelcome = document.getElementById('intro-welcome');
 
             introAvatar.src = avatarUrl;
             introOverlay.style.display = 'flex';
 
-            // 3초에서 5초 사이의 랜덤 로딩 타임 지정
-            const totalDuration = Math.random() * (5000 - 3000) + 3000;
+            const totalDuration = 3000;
             const startTime = performance.now();
 
             function updateLoading(currentTime) {
@@ -577,35 +575,16 @@ MAIN_HTML_TEMPLATE = """
                     introProgress.style.display = 'none';
                     introAvatar.classList.add('show');
                     
-                    // 커지는 애니메이션 펄스 활성화
-                    introContainer.classList.add('pulse-active');
-
-                    // 커졌을 때 동적으로 여러 보조 링 생성
-                    const createdRings = [];
-                    for (let i = 1; i <= 3; i++) {
-                        const extraRing = document.createElement('div');
-                        extraRing.className = 'extra-aurora-ring';
-                        extraRing.style.width = `${140 + i * 28}px`;
-                        extraRing.style.height = `${140 + i * 28}px`;
-                        extraRing.style.animationDuration = `${1.5 + i * 0.5}s`;
-                        introContainer.appendChild(extraRing);
-                        createdRings.push(extraRing);
-                    }
-
                     introWelcome.innerText = `${nickname}(${username}) 님 환영합니다.`;
                     introWelcome.classList.add('show');
 
                     setTimeout(() => {
-                        // 작아질 때 보조 링 제거 및 축소
-                        introContainer.classList.remove('pulse-active');
-                        createdRings.forEach(r => r.remove());
-
                         introOverlay.style.opacity = '0';
                         setTimeout(() => {
                             introOverlay.style.display = 'none';
                             onComplete();
                         }, 800);
-                    }, 1800);
+                    }, 1500);
                 }
             }
             requestAnimationFrame(updateLoading);
@@ -631,7 +610,6 @@ MAIN_HTML_TEMPLATE = """
 
             renderCategorizedSidebar();
             renderAdminViews();
-            loadDraftManual();
         }
 
         function renderCategorizedSidebar() {
@@ -700,13 +678,24 @@ MAIN_HTML_TEMPLATE = """
             }
         }
 
+        // 매뉴얼 수정 드롭다운 선택 시 자동 스크롤 개선
         function onManualSelectToEdit(val) {
             const idx = parseInt(val);
             if (idx === -1) {
                 resetManualForm();
             } else {
-                selectManualItem(idx);
+                selectedManualIndex = idx;
+                const current = appState.manuals[idx];
+                if (current) {
+                    document.getElementById('m-edit-category').value = current.category || '';
+                    document.getElementById('m-edit-pinned').checked = !!current.pinned;
+                    document.getElementById('m-edit-title').value = current.title || '';
+                    document.getElementById('m-edit-content').value = current.content || '';
+                }
             }
+            // 폼 카드 위치로 스크롤
+            const editCard = document.getElementById('manual-edit-card');
+            if (editCard) editCard.scrollIntoView({ behavior: 'smooth' });
         }
 
         function transitionToTab(targetTabId) {
@@ -744,10 +733,15 @@ MAIN_HTML_TEMPLATE = """
         function renderAdminViews() {
             if (appState.role !== 'admin') return;
 
+            const adminSet = new Set(appState.admin_whitelist || []);
+
             const wlList = document.getElementById('perm-wl-list');
             wlList.innerHTML = appState.user_whitelist.map(id => `
                 <li>
-                    <span>${id}</span>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" class="wl-check" value="${id}" style="width:auto;">
+                        <span>${id} ${adminSet.has(id) ? '<span style="color:#38bdf8; font-size:11px;">[👑 어드민]</span>' : ''}</span>
+                    </label>
                     <button class="btn-ui btn-danger" style="padding:4px 8px; font-size:11px;" onclick="updatePermission('whitelist', 'remove', '${id}')">제거</button>
                 </li>
             `).join('');
@@ -755,7 +749,10 @@ MAIN_HTML_TEMPLATE = """
             const blList = document.getElementById('perm-bl-list');
             blList.innerHTML = appState.user_blacklist.map(id => `
                 <li>
-                    <span>${id}</span>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" class="bl-check" value="${id}" style="width:auto;">
+                        <span>${id}</span>
+                    </label>
                     <button class="btn-ui btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="updatePermission('blacklist', 'remove', '${id}')">해제</button>
                 </li>
             `).join('');
@@ -764,25 +761,53 @@ MAIN_HTML_TEMPLATE = """
             logBox.innerHTML = appState.logs.map(log => `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(255,255,255,0.05); padding-bottom:4px;">${log}</div>`).join('');
         }
 
-        // 디스코드 유저 @태그 입력 처리
+        function toggleSelectAll(className, isChecked) {
+            document.querySelectorAll('.' + className).forEach(cb => cb.checked = isChecked);
+        }
+
+        // 다중 사용자 일괄 처리 함수
+        async function batchAction(actionType) {
+            const checkedWL = Array.from(document.querySelectorAll('.wl-check:checked')).map(cb => cb.value);
+            const checkedBL = Array.from(document.querySelectorAll('.bl-check:checked')).map(cb => cb.value);
+            const selectedIds = [...new Set([...checkedWL, ...checkedBL])];
+
+            if (selectedIds.length === 0) return showNotification("선택된 사용자가 없습니다.");
+
+            const res = await fetch('/api/admin/permission/batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_ids: selectedIds, action: actionType })
+            });
+
+            if (res.ok) {
+                showNotification(`선택한 ${selectedIds.length}명에 대해 처리 완료되었습니다.`);
+                syncSystemState();
+            }
+        }
+
+        // 전체 등록 유저 및 접속 유저 대상 @자동완성 스캔 보완
         function onUserIdInput(val) {
             const dropdown = document.getElementById('mention-dropdown');
             if (val.startsWith('@')) {
                 const query = val.substring(1).toLowerCase();
-                const sampleUsers = [
-                    { id: "1534184089144266872", username: "sky_aurora_admin", nickname: "스카이 오로라 봇", avatar: "https://cdn.discordapp.com/embed/avatars/0.png" },
-                    { id: "843621337066504225", username: "staff_manager", nickname: "총괄 관리자", avatar: "https://cdn.discordapp.com/embed/avatars/1.png" },
-                    { id: appState.user.id, username: appState.user.username, nickname: appState.user.global_name || appState.user.username, avatar: `https://cdn.discordapp.com/avatars/${appState.user.id}/${appState.user.avatar}.png` }
-                ];
+                
+                // 시스템 내 모든 등록 유저 스캔
+                const allScanUsers = [];
+                if (appState.user) {
+                    allScanUsers.push({ id: appState.user.id, name: appState.user.global_name || appState.user.username });
+                }
+                (appState.user_whitelist || []).forEach(id => allScanUsers.push({ id, name: `스태프 (${id})` }));
+                (appState.user_blacklist || []).forEach(id => allScanUsers.push({ id, name: `차단 유저 (${id})` }));
 
-                const filtered = sampleUsers.filter(u => u.username.toLowerCase().includes(query) || u.nickname.toLowerCase().includes(query));
+                const filtered = allScanUsers.filter(u => u.name.toLowerCase().includes(query) || u.id.includes(query));
+
                 if (filtered.length > 0) {
                     dropdown.innerHTML = filtered.map(u => `
-                        <div class="mention-item" onclick="selectMentionUser('${u.id}', '${u.nickname}', '${u.username}', '${u.avatar}')">
-                            <img src="${u.avatar}" class="mention-avatar">
+                        <div class="mention-item" onclick="selectMentionUser('${u.id}')">
+                            <span style="font-size:16px;">👤</span>
                             <div>
-                                <div style="font-size:13px; font-weight:bold; color:#fff;">${u.nickname}</div>
-                                <div style="font-size:11px; color:#8a99ad;">@${u.username} (${u.id})</div>
+                                <div style="font-size:13px; font-weight:bold; color:#fff;">${u.name}</div>
+                                <div style="font-size:11px; color:#8a99ad;">ID: ${u.id}</div>
                             </div>
                         </div>
                     `).join('');
@@ -795,16 +820,9 @@ MAIN_HTML_TEMPLATE = """
             }
         }
 
-        function selectMentionUser(id, nickname, username, avatar) {
-            selectedMentionUser = { id, nickname, username, avatar };
+        function selectMentionUser(id) {
             document.getElementById('perm-target-id').value = id;
             document.getElementById('mention-dropdown').style.display = 'none';
-
-            const card = document.getElementById('selected-user-card');
-            document.getElementById('sel-card-img').src = avatar;
-            document.getElementById('sel-card-name').innerText = `${nickname} (@${username})`;
-            document.getElementById('sel-card-id').innerText = `ID: ${id}`;
-            card.style.display = 'flex';
         }
 
         async function saveManualData() {
@@ -822,8 +840,7 @@ MAIN_HTML_TEMPLATE = """
             });
 
             if (res.ok) {
-                showNotification("매뉴얼이 성공적으로 저장되었습니다.");
-                localStorage.removeItem('sky_manual_draft');
+                showNotification("매뉴얼이 저장되었습니다.");
                 syncSystemState();
             }
         }
@@ -836,23 +853,7 @@ MAIN_HTML_TEMPLATE = """
                 content: document.getElementById('m-edit-content').value
             };
             localStorage.setItem('sky_manual_draft', JSON.stringify(draft));
-            showNotification("매뉴얼 임시저장이 완료되었습니다.");
-        }
-
-        function loadDraftManual() {
-            const draftStr = localStorage.getItem('sky_manual_draft');
-            if (draftStr) {
-                try {
-                    const draft = JSON.parse(draftStr);
-                    if (draft.title || draft.content) {
-                        document.getElementById('m-edit-category').value = draft.category || '';
-                        document.getElementById('m-edit-pinned').checked = !!draft.pinned;
-                        document.getElementById('m-edit-title').value = draft.title || '';
-                        document.getElementById('m-edit-content').value = draft.content || '';
-                        showNotification("임시 보관된 매뉴얼을 불러왔습니다.");
-                    }
-                } catch(e) {}
-            }
+            showNotification("매뉴얼 임시저장 완료");
         }
 
         async function deleteManualData() {
@@ -895,10 +896,7 @@ MAIN_HTML_TEMPLATE = """
 
             if (res.ok) {
                 showNotification(`권한 변경 완료: ${target} (${action})`);
-                if (!explicitId) {
-                    document.getElementById('perm-target-id').value = '';
-                    document.getElementById('selected-user-card').style.display = 'none';
-                }
+                if (!explicitId) document.getElementById('perm-target-id').value = '';
                 syncSystemState();
             }
         }
@@ -910,7 +908,7 @@ MAIN_HTML_TEMPLATE = """
 """
 
 # --------------------------------------------------
-# 🛣️ Flask 라우트 정의 (백엔드 상호작용 강화)
+# 🛣️ Flask 라우트 정의
 # --------------------------------------------------
 @app.route("/")
 def index():
@@ -985,6 +983,7 @@ def get_state():
         "manuals": data.get("manuals", []),
         "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
         "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
+        "admin_whitelist": data.get("admin_whitelist", []) if role == "admin" else [],
         "logs": data.get("logs", []) if role == "admin" else []
     })
 
@@ -1081,44 +1080,74 @@ def admin_permission():
             if "user_whitelist" not in data: data["user_whitelist"] = []
             if target_id not in data["user_whitelist"]:
                 data["user_whitelist"].append(target_id)
-            
-            # 블랙리스트에서 제거
             if "user_blacklist" in data and target_id in data["user_blacklist"]:
                 data["user_blacklist"].remove(target_id)
 
-            # 옵션으로 어드민 권한 부여
             if is_admin:
                 if "admin_whitelist" not in data: data["admin_whitelist"] = []
                 if target_id not in data["admin_whitelist"]:
                     data["admin_whitelist"].append(target_id)
-                add_log(data, "권한 변경", user_name, f"ID {target_id} -> 화이트리스트 및 어드민 승격 추가")
-            else:
-                add_log(data, "권한 변경", user_name, f"ID {target_id} -> 화이트리스트 추가")
 
         elif action == "remove":
             if "user_whitelist" in data and target_id in data["user_whitelist"]:
                 data["user_whitelist"].remove(target_id)
-            add_log(data, "권한 변경", user_name, f"ID {target_id} -> 화이트리스트 제거")
 
     elif target == "blacklist":
         if action == "add":
             if "user_blacklist" not in data: data["user_blacklist"] = []
             if target_id not in data["user_blacklist"]:
                 data["user_blacklist"].append(target_id)
-
-            # 블랙리스트 등록 시 화이트리스트 및 어드민에서 유저 ID 자동 삭제
             if "user_whitelist" in data and target_id in data["user_whitelist"]:
                 data["user_whitelist"].remove(target_id)
             if "admin_whitelist" in data and target_id in data["admin_whitelist"] and target_id not in DEFAULT_ADMINS:
                 data["admin_whitelist"].remove(target_id)
 
-            add_log(data, "권한 변경", user_name, f"ID {target_id} -> 블랙리스트 등록 (화이트리스트 자동 제거)")
-
         elif action == "remove":
             if "user_blacklist" in data and target_id in data["user_blacklist"]:
                 data["user_blacklist"].remove(target_id)
-            add_log(data, "권한 변경", user_name, f"ID {target_id} -> 블랙리스트 차단 해제")
 
+    save_data(data)
+    return jsonify({"status": "success"})
+
+# 다중 선택 일괄 권한 처리 라우트
+@app.route("/api/admin/permission/batch", methods=["POST"])
+def admin_permission_batch():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
+
+    user_ids = request.json.get("user_ids", [])
+    action = request.json.get("action")
+    user_name = user.get("global_name") or user.get("username")
+
+    for uid in user_ids:
+        uid = str(uid)
+        if action == "admin_upgrade":
+            if uid not in data.get("admin_whitelist", []):
+                data.setdefault("admin_whitelist", []).append(uid)
+            if uid not in data.get("user_whitelist", []):
+                data.setdefault("user_whitelist", []).append(uid)
+        elif action == "admin_demote":
+            if uid in data.get("admin_whitelist", []) and uid not in DEFAULT_ADMINS:
+                data["admin_whitelist"].remove(uid)
+        elif action == "blacklist":
+            if uid not in data.get("user_blacklist", []):
+                data.setdefault("user_blacklist", []).append(uid)
+            if uid in data.get("user_whitelist", []):
+                data["user_whitelist"].remove(uid)
+            if uid in data.get("admin_whitelist", []) and uid not in DEFAULT_ADMINS:
+                data["admin_whitelist"].remove(uid)
+        elif action == "remove":
+            if uid in data.get("user_whitelist", []):
+                data["user_whitelist"].remove(uid)
+            if uid in data.get("user_blacklist", []):
+                data["user_blacklist"].remove(uid)
+
+    add_log(data, "일괄 권한 변경", user_name, f"유저 {len(user_ids)}명에 대해 '{action}' 처리 수행")
     save_data(data)
     return jsonify({"status": "success"})
 
