@@ -15,7 +15,7 @@ app.secret_key = os.urandom(24)
 # ⚙️ 설정 및 환경 변수
 # ==========================================
 CLIENT_ID = "1534184089144266872"
-CLIENT_SECRET = "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm"
+CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm")
 BASE_URL = "https://sky-aurora-staff.onrender.com"
 
 ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
@@ -142,7 +142,6 @@ MAIN_HTML_TEMPLATE = """
         .alert-sub-text { font-size: 14px; color: #a0aec0; font-family: 'Pretendard', sans-serif; }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
-        /* 🚀 인트로 로딩 화면 스타일 */
         #intro-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: #030509; z-index: 99999; display: flex; flex-direction: column;
@@ -199,7 +198,6 @@ MAIN_HTML_TEMPLATE = """
 
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         
-        /* 📱 반응형 레이아웃 설정 */
         .sidebar { width: 300px; background: rgba(0, 0, 0, 0.4); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 20px 14px; overflow-y: auto; }
         .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1px; margin: 16px 0 8px 8px; text-transform: uppercase; font-family: 'Pretendard'; font-weight: bold; }
         
@@ -226,13 +224,11 @@ MAIN_HTML_TEMPLATE = """
         ul.data-list { list-style: none; padding: 0; }
         ul.data-list li { background: rgba(10, 16, 32, 0.7); padding: 12px 14px; margin-bottom: 8px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
 
-        /* 🎬 부드러운 탭 애니메이션 */
         .tab-enter { animation: manualEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .tab-leave { animation: manualLeave 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
         @keyframes manualEnter { 0% { opacity: 0; transform: translateY(20px) scale(0.98); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
         @keyframes manualLeave { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-15px) scale(0.98); } }
 
-        /* 📱 모바일 UI 완벽 대응 CSS */
         @media (max-width: 768px) {
             .container { width: 100%; height: 100vh; border-radius: 0; border: none; }
             .dashboard { flex-direction: column; }
@@ -264,7 +260,7 @@ MAIN_HTML_TEMPLATE = """
 
         function login() {
             const redirectUri = encodeURIComponent(window.location.origin + '/callback');
-            location.href = `https://discord.com/oauth2/authorize?client_id=__CLIENT_ID__&response_type=code&redirect_uri=${redirectUri}&scope=identify`;
+            location.href = `https://discord.com/oauth2/authorize?client_id={{ client_id }}&response_type=code&redirect_uri=${redirectUri}&scope=identify`;
         }
     </script>
 </head>
@@ -275,7 +271,6 @@ MAIN_HTML_TEMPLATE = """
         <div class="alert-sub-text">시스템 정보의 무단 촬영 및 복제 시도는 금지되어 있습니다.</div>
     </div>
 
-    <!-- 🚀 인트로 로딩 커스텀 레이어 -->
     <div id="intro-overlay" style="display:none;">
         <div class="intro-circle-container">
             <div id="intro-ring" class="intro-ring"></div>
@@ -440,7 +435,6 @@ MAIN_HTML_TEMPLATE = """
             } catch(e) { console.error("Sync error:", e); }
         }
 
-        /* 🚀 요청하신 랜덤 카운트 + 펄스 원형 로딩 인트로 구현 */
         function runCustomIntro(nickname, username, avatarUrl, onComplete) {
             const introOverlay = document.getElementById('intro-overlay');
             const introProgress = document.getElementById('intro-progress');
@@ -451,7 +445,7 @@ MAIN_HTML_TEMPLATE = """
             introAvatar.src = avatarUrl;
             introOverlay.style.display = 'flex';
 
-            const totalDuration = (Math.random() * (2000 - 300) + 300); // 0.3초 ~ 2초 사이 랜덤
+            const totalDuration = (Math.random() * (2000 - 300) + 300);
             const startTime = performance.now();
 
             function updateLoading(currentTime) {
@@ -462,10 +456,9 @@ MAIN_HTML_TEMPLATE = """
                 if (progress < 100) {
                     requestAnimationFrame(updateLoading);
                 } else {
-                    // 100% 완료 시 애니메이션 실행
                     introProgress.style.display = 'none';
-                    introRing.classList.add('expand'); // 1.3배 확대 및 선 효과
-                    introAvatar.classList.add('show'); // 중앙 얼굴 팝업
+                    introRing.classList.add('expand');
+                    introAvatar.classList.add('show');
                     introWelcome.innerText = `${nickname}(${username}) 님 환영합니다.`;
                     introWelcome.classList.add('show');
 
@@ -503,12 +496,10 @@ MAIN_HTML_TEMPLATE = """
             renderAdminViews();
         }
 
-        /* 📌 상단 고정 및 주제(카테고리)별 사이드바 정렬 */
         function renderCategorizedSidebar() {
             const container = document.getElementById('manual-sidebar-categorized');
             container.innerHTML = '';
 
-            // 상단 고정 매뉴얼 우선 정렬
             const sortedManuals = [...appState.manuals].map((m, originalIdx) => ({ ...m, originalIdx }));
             sortedManuals.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
@@ -544,6 +535,22 @@ MAIN_HTML_TEMPLATE = """
             }
         }
 
+        function selectManualItem(idx) {
+            selectedManualIndex = idx;
+            renderCategorizedSidebar();
+            transitionToTab('view-manual');
+            
+            if (appState.role === 'admin') {
+                const current = appState.manuals[idx];
+                if (current) {
+                    document.getElementById('m-edit-category').value = current.category || '';
+                    document.getElementById('m-edit-pinned').checked = !!current.pinned;
+                    document.getElementById('m-edit-title').value = current.title || '';
+                    document.getElementById('m-edit-content').value = current.content || '';
+                }
+            }
+        }
+
         function transitionToTab(targetTabId) {
             if (currentActiveTabId === targetTabId) return;
 
@@ -553,15 +560,14 @@ MAIN_HTML_TEMPLATE = """
             if (currentTab) {
                 currentTab.classList.remove('tab-enter');
                 currentTab.classList.add('tab-leave');
-
                 setTimeout(() => {
                     currentTab.style.display = 'none';
                     currentTab.classList.remove('tab-leave');
-
+                    
                     targetTab.style.display = 'block';
                     targetTab.classList.add('tab-enter');
                     currentActiveTabId = targetTabId;
-                }, 200);
+                }, 250);
             } else {
                 targetTab.style.display = 'block';
                 targetTab.classList.add('tab-enter');
@@ -569,62 +575,71 @@ MAIN_HTML_TEMPLATE = """
             }
         }
 
-        function selectManualItem(idx) {
-            selectedManualIndex = idx;
-            document.querySelectorAll('.admin-nav').forEach(el => el.classList.remove('active'));
-            transitionToTab('view-manual');
-            renderCategorizedSidebar();
-        }
-
         function switchAdminTab(tabName) {
             document.querySelectorAll('.admin-nav').forEach(el => el.classList.remove('active'));
             const navEl = document.getElementById(`nav-${tabName}`);
             if (navEl) navEl.classList.add('active');
+            
             transitionToTab(`view-admin-${tabName}`);
         }
 
         function renderAdminViews() {
             if (appState.role !== 'admin') return;
 
-            document.getElementById('perm-wl-list').innerHTML = appState.user_whitelist.map(id => `
-                <li><span>${id}</span><button onclick="updatePermission('whitelist', 'remove', '${id}')" class="btn-ui btn-danger" style="padding:3px 8px; font-size:12px;">삭제</button></li>
-            `).join('');
-            
-            document.getElementById('perm-bl-list').innerHTML = appState.user_blacklist.map(id => `
-                <li><span>${id}</span><button onclick="updatePermission('blacklist', 'remove', '${id}')" class="btn-ui btn-secondary" style="padding:3px 8px; font-size:12px;">해제</button></li>
+            const wlList = document.getElementById('perm-wl-list');
+            wlList.innerHTML = appState.user_whitelist.map(id => `
+                <li>
+                    <span>${id}</span>
+                    <button class="btn-ui btn-danger" style="padding:4px 8px; font-size:11px;" onclick="updatePermission('whitelist', 'remove', '${id}')">제거</button>
+                </li>
             `).join('');
 
-            document.getElementById('admin-log-box').innerHTML = appState.logs.map(l => `
-                <div style="padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.03); color:${l.includes('[어드민]') ? '#38bdf8' : '#00ffaa'};">${l}</div>
+            const blList = document.getElementById('perm-bl-list');
+            blList.innerHTML = appState.user_blacklist.map(id => `
+                <li>
+                    <span>${id}</span>
+                    <button class="btn-ui btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="updatePermission('blacklist', 'remove', '${id}')">해제</button>
+                </li>
             `).join('');
+
+            const logBox = document.getElementById('admin-log-box');
+            logBox.innerHTML = appState.logs.map(log => `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(255,255,255,0.05); padding-bottom:4px;">${log}</div>`).join('');
         }
 
         async function saveManualData() {
-            const category = document.getElementById('m-edit-category').value.trim() || '공통 매뉴얼';
+            const category = document.getElementById('m-edit-category').value.trim();
             const pinned = document.getElementById('m-edit-pinned').checked;
             const title = document.getElementById('m-edit-title').value.trim();
             const content = document.getElementById('m-edit-content').value.trim();
-            if(!title) return alert('제목을 입력해주세요.');
 
-            let updatedManuals = [...appState.manuals];
-            const manualObj = { category, pinned, title, content };
+            if (!title || !content) return alert("제목과 내용을 입력해주세요.");
 
-            if (selectedManualIndex < updatedManuals.length) {
-                updatedManuals[selectedManualIndex] = manualObj;
-            } else {
-                updatedManuals.push(manualObj);
+            const res = await fetch('/api/admin/manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ index: selectedManualIndex, category, pinned, title, content })
+            });
+
+            if (res.ok) {
+                alert("매뉴얼이 저장되었습니다.");
+                syncSystemState();
             }
-
-            await sendAdminAction({ action: 'save_manual', manuals: updatedManuals, title });
-            resetManualForm();
         }
 
         async function deleteManualData() {
-            if (confirm('매뉴얼을 삭제하시겠습니까?')) {
-                let updatedManuals = appState.manuals.filter((_, idx) => idx !== selectedManualIndex);
-                await sendAdminAction({ action: 'delete_manual', manuals: updatedManuals, title: appState.manuals[selectedManualIndex]?.title });
+            if (!confirm("정말 이 매뉴얼을 삭제하시겠습니까?")) return;
+
+            const res = await fetch('/api/admin/manual/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ index: selectedManualIndex })
+            });
+
+            if (res.ok) {
+                alert("삭제되었습니다.");
                 selectedManualIndex = 0;
                 resetManualForm();
+                syncSystemState();
             }
         }
 
@@ -636,151 +651,193 @@ MAIN_HTML_TEMPLATE = """
             document.getElementById('m-edit-content').value = '';
         }
 
-        async function updatePermission(type, act, targetId = null) {
-            const id = targetId || document.getElementById('perm-target-id').value.trim();
-            if (!id) return alert('디스코드 유저 ID를 입력하세요.');
+        async function updatePermission(target, action, explicitId = null) {
+            const userId = explicitId || document.getElementById('perm-target-id').value.trim();
+            if (!userId) return alert("디스코드 유저 ID를 입력해주세요.");
 
-            let wl = [...appState.user_whitelist];
-            let bl = [...appState.user_blacklist];
-
-            if (type === 'whitelist') {
-                if (act === 'add' && !wl.includes(id)) wl.push(id);
-                if (act === 'remove') wl = wl.filter(i => i !== id);
-            } else {
-                if (act === 'add' && !bl.includes(id)) bl.push(id);
-                if (act === 'remove') bl = bl.filter(i => i !== id);
-            }
-
-            await sendAdminAction({ action: `${act}_${type}`, user_whitelist: wl, user_blacklist: bl, target_id: id });
-            document.getElementById('perm-target-id').value = '';
-        }
-
-        async function sendAdminAction(payload) {
-            const res = await fetch('/api/admin_update', {
+            const res = await fetch('/api/admin/permission', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target, action, user_id: userId })
             });
-            if (res.ok) syncSystemState();
+
+            if (res.ok) {
+                if (!explicitId) document.getElementById('perm-target-id').value = '';
+                syncSystemState();
+            }
         }
 
-        syncSystemState();
-        setInterval(syncSystemState, 3000);
+        window.onload = syncSystemState;
     </script>
 </body>
 </html>
 """
 
-@app.route('/')
-def main_page():
-    return MAIN_HTML_TEMPLATE.replace('__CLIENT_ID__', CLIENT_ID)
+# --------------------------------------------------
+# 🛣️ Flask 라우트 정의
+# --------------------------------------------------
+@app.route("/")
+def index():
+    return render_template_string(MAIN_HTML_TEMPLATE, client_id=CLIENT_ID)
 
-@app.route('/callback')
+@app.route("/callback")
 def callback():
-    code = request.args.get('code')
+    code = request.args.get("code")
     if not code:
-        return "인증 코드 오류가 발생했습니다.", 400
+        return redirect("/")
 
-    redirect_uri = f"{BASE_URL}/callback"
-    token_data = {
-        'client_id': CLIENT_ID,
-        'client_secret': CLIENT_SECRET,
-        'grant_type': 'authorization_code',
-        'code': code,
-        'redirect_uri': redirect_uri
-    }
-    res = requests.post('https://discord.com/api/v10/oauth2/token', data=token_data, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+    redirect_uri = request.host_url.rstrip('/') + '/callback'
     
-    if res.status_code == 200:
-        access_token = res.json().get('access_token')
-        user_res = requests.get('https://discord.com/api/v10/users/@me', headers={'Authorization': f'Bearer {access_token}'})
-        if user_res.status_code == 200:
-            user_info = user_res.json()
-            user_id = str(user_info.get('id'))
-            data = load_data()
+    token_res = requests.post("https://discord.com/api/oauth2/token", data={
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri
+    }, headers={"Content-Type": "application/x-www-form-length-encoded"})
 
-            # 블랙리스트 체크
-            if user_id in data.get('user_blacklist', []):
-                return "<h2 style='color:#ef4444; text-align:center; margin-top:100px;'>접근 차단: 블랙리스트 계정입니다.</h2>", 403
+    if token_res.status_code != 200:
+        return redirect("/")
 
-            # 화이트리스트 체크 (어드민은 자동 통과)
-            if user_id in data.get('admin_whitelist', []):
-                session['user'] = user_info
-                session['role'] = 'admin'
-                add_log(data, "어드민", user_info.get('username'), f"시스템 로그인 성공 (어드민 권한)")
-            else:
-                if data.get('user_whitelist') and user_id not in data.get('user_whitelist'):
-                    return f"<h2 style='color:#ef4444; text-align:center; margin-top:100px;'>접근 거부: 화이트리스트에 등록되지 않았습니다. (ID: {user_id})</h2>", 403
-                
-                session['user'] = user_info
-                session['role'] = 'staff'
-                add_log(data, "스태프", user_info.get('username'), f"스태프 시스템 접속")
+    access_token = token_res.json().get("access_token")
+    user_res = requests.get("https://discord.com/api/users/@me", headers={
+        "Authorization": f"Bearer {access_token}"
+    })
 
-            save_data(data)
-            return redirect('/')
+    if user_res.status_code == 200:
+        session["user"] = user_res.json()
+        
+        data = load_data()
+        user_id = str(session["user"]["id"])
+        user_name = session["user"].get("global_name") or session["user"].get("username")
+        
+        add_log(data, "인증", user_name, f"시스템에 로그인함 (ID: {user_id})")
+        save_data(data)
 
-    return "Discord 인증에 실패했습니다.", 400
+    return redirect("/")
 
-@app.route('/logout')
+@app.route("/logout")
 def logout():
     session.clear()
-    return redirect('/')
+    return redirect("/")
 
-@app.route('/api/state')
-def get_system_state():
-    user = session.get('user')
-    role = session.get('role')
+@app.route("/api/state")
+def get_state():
+    user = session.get("user")
     if not user:
-        return jsonify({"status": "unauthorized"}), 401
+        return jsonify({"status": "unauthorized"}), 200
 
     data = load_data()
-    user_id = str(user.get('id'))
+    user_id = str(user.get("id"))
 
-    if role != 'admin':
-        if user_id in data.get('user_blacklist', []):
-            session.clear()
-            return jsonify({"status": "forbidden"}), 403
-        if data.get('user_whitelist') and user_id not in data.get('user_whitelist'):
-            session.clear()
-            return jsonify({"status": "forbidden"}), 403
+    if user_id in data.get("user_blacklist", []):
+        session.clear()
+        return jsonify({"error": "blacklisted"}), 403
 
-    response_payload = {
-        "status": "authenticated",
+    role = "guest"
+    if user_id in data.get("admin_whitelist", DEFAULT_ADMINS):
+        role = "admin"
+    elif user_id in data.get("user_whitelist", []):
+        role = "staff"
+    else:
+        session.clear()
+        return jsonify({"error": "not_authorized"}), 403
+
+    return jsonify({
         "user": user,
         "role": role,
-        "manuals": data.get("manuals", [])
+        "manuals": data.get("manuals", []),
+        "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
+        "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
+        "logs": data.get("logs", []) if role == "admin" else []
+    })
+
+@app.route("/api/admin/manual", methods=["POST"])
+def admin_manual():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
+
+    req_data = request.json or {}
+    idx = req_data.get("index")
+    category = req_data.get("category", "공통 매뉴얼")
+    pinned = req_data.get("pinned", False)
+    title = req_data.get("title")
+    content = req_data.get("content")
+
+    user_name = user.get("global_name") or user.get("username")
+    manual_item = {
+        "id": int(datetime.datetime.now().timestamp()),
+        "category": category,
+        "pinned": pinned,
+        "title": title,
+        "content": content
     }
 
-    if role == 'admin':
-        response_payload["user_whitelist"] = data.get("user_whitelist", [])
-        response_payload["user_blacklist"] = data.get("user_blacklist", [])
-        response_payload["logs"] = data.get("logs", [])
-
-    return jsonify(response_payload)
-
-@app.route('/api/admin_update', methods=['POST'])
-def handle_admin_update():
-    if session.get('role') != 'admin':
-        return jsonify({"status": "unauthorized"}), 401
-
-    user = session.get('user')
-    data = load_data()
-    req = request.get_json()
-    action = req.get('action')
-
-    if 'manuals' in req: data['manuals'] = req['manuals']
-    if 'user_whitelist' in req: data['user_whitelist'] = req['user_whitelist']
-    if 'user_blacklist' in req: data['user_blacklist'] = req['user_blacklist']
-
-    if action == 'save_manual': add_log(data, "어드민", user.get('username'), f"매뉴얼 저장 ({req.get('title')})")
-    elif action == 'delete_manual': add_log(data, "어드민", user.get('username'), f"매뉴얼 삭제 ({req.get('title')})")
-    elif action == 'add_whitelist': add_log(data, "어드민", user.get('username'), f"화이트리스트 추가 ({req.get('target_id')})")
-    elif action == 'add_blacklist': add_log(data, "어드민", user.get('username'), f"블랙리스트 등록 ({req.get('target_id')})")
-    elif action == 'remove_whitelist': add_log(data, "어드민", user.get('username'), f"화이트리스트 삭제 ({req.get('target_id')})")
-    elif action == 'remove_blacklist': add_log(data, "어드민", user.get('username'), f"블랙리스트 해제 ({req.get('target_id')})")
+    if idx is not None and 0 <= idx < len(data["manuals"]):
+        data["manuals"][idx] = manual_item
+        add_log(data, "매뉴얼 수정", user_name, f"매뉴얼 '{title}' 수정 완료")
+    else:
+        data["manuals"].append(manual_item)
+        add_log(data, "매뉴얼 등록", user_name, f"새 매뉴얼 '{title}' 등록 완료")
 
     save_data(data)
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "success"})
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+@app.route("/api/admin/manual/delete", methods=["POST"])
+def admin_manual_delete():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
+
+    idx = request.json.get("index")
+    if idx is not None and 0 <= idx < len(data["manuals"]):
+        deleted = data["manuals"].pop(idx)
+        user_name = user.get("global_name") or user.get("username")
+        add_log(data, "매뉴얼 삭제", user_name, f"매뉴얼 '{deleted.get('title')}' 삭제 완료")
+        save_data(data)
+
+    return jsonify({"status": "success"})
+
+@app.route("/api/admin/permission", methods=["POST"])
+def admin_permission():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
+
+    target = request.json.get("target")
+    action = request.json.get("action")
+    target_id = str(request.json.get("user_id"))
+
+    key = "user_whitelist" if target == "whitelist" else "user_blacklist"
+    if key not in data:
+        data[key] = []
+
+    user_name = user.get("global_name") or user.get("username")
+
+    if action == "add":
+        if target_id not in data[key]:
+            data[key].append(target_id)
+            add_log(data, "권한 변경", user_name, f"ID {target_id} -> {target} 추가")
+    elif action == "remove":
+        if target_id in data[key]:
+            data[key].remove(target_id)
+            add_log(data, "권한 변경", user_name, f"ID {target_id} -> {target} 제거")
+
+    save_data(data)
+    return jsonify({"status": "success"})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
