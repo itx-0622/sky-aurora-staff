@@ -259,7 +259,8 @@ MAIN_HTML_TEMPLATE = """
         document.addEventListener('visibilitychange', function() { if (document.hidden) triggerSecurityLock(); else releaseSecurityLock(); });
 
         function login() {
-            const redirectUri = encodeURIComponent(window.location.origin + '/callback');
+            // BASE_URL 기반 고정 Redirect URI 사용하여 디스코드 콜백 오류 방지
+            const redirectUri = encodeURIComponent("https://sky-aurora-staff.onrender.com/callback");
             location.href = `https://discord.com/oauth2/authorize?client_id={{ client_id }}&response_type=code&redirect_uri=${redirectUri}&scope=identify`;
         }
     </script>
@@ -411,7 +412,7 @@ MAIN_HTML_TEMPLATE = """
         async function syncSystemState() {
             try {
                 const res = await fetch('/api/state');
-                if (res.status === 403) { alert("권한이 거부되었거나 변경되었습니다."); location.reload(); return; }
+                if (res.status === 403) { alert("권한이 거부되었거나 화이트리스트에 등록되지 않은 계정입니다."); location.reload(); return; }
                 if (res.ok) {
                     const data = await res.json();
                     if (data.status === 'unauthorized') return;
@@ -674,7 +675,7 @@ MAIN_HTML_TEMPLATE = """
 """
 
 # --------------------------------------------------
-# 🛣️ Flask 라우트 정의
+# 🛣️ Flask 라우트 정의 (버그 수정 반영 영역)
 # --------------------------------------------------
 @app.route("/")
 def index():
@@ -686,17 +687,21 @@ def callback():
     if not code:
         return redirect("/")
 
-    redirect_uri = request.host_url.rstrip('/') + '/callback'
+    # 명확한 OAuth Redirect URI 설정
+    redirect_uri = f"{BASE_URL}/callback"
     
+    # [수정 완료] Content-Type 헤더 오타 해결 (application/x-www-form-urlencoded)
     token_res = requests.post("https://discord.com/api/oauth2/token", data={
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
         "grant_type": "authorization_code",
         "code": code,
         "redirect_uri": redirect_uri
-    }, headers={"Content-Type": "application/x-www-form-length-encoded"})
+    }, headers={"Content-Type": "application/x-www-form-urlencoded"})
 
+    # 토큰 검증 실패 시 콘솔 출력 후 리다이렉트
     if token_res.status_code != 200:
+        print(f"[Discord OAuth Token Error] Status: {token_res.status_code}, Details: {token_res.text}")
         return redirect("/")
 
     access_token = token_res.json().get("access_token")
@@ -711,7 +716,7 @@ def callback():
         user_id = str(session["user"]["id"])
         user_name = session["user"].get("global_name") or session["user"].get("username")
         
-        add_log(data, "인증", user_name, f"시스템에 로그인함 (ID: {user_id})")
+        add_log(data, "인증", user_name, f"시스템에 성공적으로 로그인함 (ID: {user_id})")
         save_data(data)
 
     return redirect("/")
@@ -740,6 +745,7 @@ def get_state():
     elif user_id in data.get("user_whitelist", []):
         role = "staff"
     else:
+        # 등록되지 않은 이용자의 권한 거부 처리
         session.clear()
         return jsonify({"error": "not_authorized"}), 403
 
