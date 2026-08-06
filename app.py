@@ -60,6 +60,7 @@ def load_data():
         "admin_whitelist": DEFAULT_ADMINS,
         "user_whitelist": [],
         "user_blacklist": [],
+        "user_profiles": {}, # 사용자 프로필 캐시 (id: {username, global_name, avatar})
         "manuals": [
             {
                 "id": 1,
@@ -141,7 +142,6 @@ MAIN_HTML_TEMPLATE = """
         .alert-sub-text { font-size: 14px; color: #a0aec0; font-family: 'Pretendard', sans-serif; }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
-        /* 커스텀 오로라 라이트 알림 토스트 UI */
         #custom-notification {
             position: fixed; top: 25px; right: 25px; z-index: 999999; display: flex; align-items: center; gap: 12px;
             padding: 14px 22px; background: rgba(8, 15, 30, 0.95); border: 1px solid #00ffaa;
@@ -157,7 +157,6 @@ MAIN_HTML_TEMPLATE = """
             justify-content: center; align-items: center; opacity: 1; transition: opacity 0.8s ease;
         }
         
-        /* 롤백된 링 대신 아바타 오로라 오라 펄스 연출 */
         .intro-circle-container {
             position: relative; width: 120px; height: 120px; display: flex;
             justify-content: center; align-items: center; margin-bottom: 24px;
@@ -167,10 +166,7 @@ MAIN_HTML_TEMPLATE = """
             background: radial-gradient(circle, rgba(0,255,170,0.6) 0%, rgba(0,242,254,0.2) 60%, transparent 100%);
             animation: auraPulse 2s ease-in-out infinite alternate; filter: blur(10px);
         }
-        @keyframes auraPulse {
-            0% { transform: scale(0.85); opacity: 0.4; }
-            100% { transform: scale(1.35); opacity: 0.9; }
-        }
+        @keyframes auraPulse { 0% { transform: scale(0.85); opacity: 0.4; } 100% { transform: scale(1.35); opacity: 0.9; } }
 
         .intro-avatar {
             width: 100px; height: 100px; border-radius: 50%; object-fit: cover;
@@ -227,7 +223,6 @@ MAIN_HTML_TEMPLATE = """
         input, textarea, select { width: 100%; background: rgba(3, 5, 9, 0.8); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.12); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; }
         input:focus, textarea:focus, select:focus { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
 
-        /* 버튼 호버 링 효과 및 오로라 스타일 적용 */
         .btn-ui {
             position: relative; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none;
             padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif;
@@ -245,19 +240,23 @@ MAIN_HTML_TEMPLATE = """
         .btn-secondary { background: linear-gradient(135deg, #475569, #334155); }
 
         ul.data-list { list-style: none; padding: 0; }
-        ul.data-list li { background: rgba(10, 16, 32, 0.7); padding: 12px 14px; margin-bottom: 8px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
+        ul.data-list li { background: rgba(10, 16, 32, 0.7); padding: 14px; margin-bottom: 10px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
 
-        /* 디스코드 태그 추천 팝업 UI */
+        .user-card-info { display: flex; align-items: center; gap: 12px; }
+        .user-card-avatar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #00ffaa; object-fit: cover; }
+        .user-card-names { display: flex; flex-direction: column; }
+        .user-card-nick { font-weight: bold; color: #ffffff; font-size: 14px; }
+        .user-card-sub { font-size: 12px; color: #00ffaa; display: flex; align-items: center; gap: 6px; }
+        .eye-btn { cursor: pointer; background: transparent; border: none; color: #8a99ad; font-size: 13px; margin-left: 4px; }
+        .eye-btn:hover { color: #00ffaa; }
+
         .mention-dropdown {
             position: absolute; top: 45px; left: 0; right: 0; z-index: 1000;
             background: rgba(15, 23, 42, 0.98); border: 1px solid #00ffaa; border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8); display: none; max-height: 180px; overflow-y: auto;
         }
-        .mention-item {
-            display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; transition: background 0.2s;
-        }
+        .mention-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; transition: background 0.2s; }
         .mention-item:hover { background: rgba(0, 255, 170, 0.15); }
-        .mention-avatar { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #00ffaa; }
 
         .tab-enter { animation: manualEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .tab-leave { animation: manualLeave 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
@@ -299,14 +298,8 @@ MAIN_HTML_TEMPLATE = """
         function releaseSecurityLock() { const overlay = document.getElementById('security-overlay'); if (overlay) overlay.style.display = 'none'; }
 
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'PrintScreen' || e.key === 'F12') { 
-                triggerSecurityLock();
-                notifyLog("화면 캡처 감지 (PrintScreen)");
-            }
-            if (e.shiftKey && (e.key === 'S' || e.key === 's') && (e.metaKey || e.key === 'Meta')) {
-                triggerSecurityLock();
-                notifyLog("캡처 도구 감지 (Win+Shift+S)");
-            }
+            if (e.key === 'PrintScreen' || e.key === 'F12') { triggerSecurityLock(); notifyLog("화면 캡처 감지 (PrintScreen)"); }
+            if (e.shiftKey && (e.key === 'S' || e.key === 's') && (e.metaKey || e.key === 'Meta')) { triggerSecurityLock(); notifyLog("캡처 도구 감지 (Win+Shift+S)"); }
             const k = e.key.toLowerCase();
             if (e.ctrlKey || e.metaKey) {
                 if (k === 'c') notifyLog("복사 감지 (Ctrl+C)");
@@ -432,8 +425,26 @@ MAIN_HTML_TEMPLATE = """
                     
                     <div class="content-card" style="margin-bottom:20px;">
                         <div style="position:relative;">
-                            <input type="text" id="perm-target-id" placeholder="대상 디스코드 ID 또는 @사용자이름 입력" style="margin-bottom:8px;" oninput="onUserIdInput(this.value)">
+                            <div style="display:flex; gap:10px; margin-bottom:8px;">
+                                <input type="text" id="perm-target-id" placeholder="대상 디스코드 ID 또는 @사용자이름 입력" style="margin-bottom:0;" oninput="onUserIdInput(this.value)">
+                                <button onclick="searchAndDisplayUser()" class="btn-ui btn-secondary" style="width:100px; flex-shrink:0;">👤 조회</button>
+                            </div>
                             <div id="mention-dropdown" class="mention-dropdown"></div>
+
+                            <!-- 조회된 사용자 실시간 정보 카드 -->
+                            <div id="searched-user-card" style="display:none; background:rgba(0, 255, 170, 0.05); border:1px solid #00ffaa; padding:12px; border-radius:12px; margin-bottom:12px;">
+                                <div class="user-card-info">
+                                    <img id="sc-avatar" src="" class="user-card-avatar" alt="Avatar">
+                                    <div class="user-card-names">
+                                        <div id="sc-nick" class="user-card-nick">사용자 이름</div>
+                                        <div class="user-card-sub">
+                                            ID: <span id="sc-id-masked">**************</span>
+                                            <button class="eye-btn" onclick="toggleIdVisibility('sc-id-masked', 'sc-id-full')">👁️</button>
+                                            <span id="sc-id-full" style="display:none;"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
                             <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
                                 <label style="display:flex; align-items:center; gap:6px; font-family:'Pretendard'; font-size:13px; color:#38bdf8; cursor:pointer;">
@@ -447,7 +458,7 @@ MAIN_HTML_TEMPLATE = """
                         </div>
                     </div>
 
-                    <!-- 다중 사용자 일괄 처리 어드민 제어 패널 -->
+                    <!-- 다중 선택 일괄 제어 패널 -->
                     <div class="content-card" style="margin-bottom:20px;">
                         <h3 style="font-size:14px; color:#00ffaa; margin-bottom:10px;">⚡ 선택 유저 일괄 제어</h3>
                         <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -519,7 +530,7 @@ MAIN_HTML_TEMPLATE = """
         }
         animate();
 
-        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], logs: [] };
+        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [] };
         let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
@@ -551,7 +562,6 @@ MAIN_HTML_TEMPLATE = """
             } catch(e) { console.error("Sync error:", e); }
         }
 
-        // 인트로 연출 (대체 애니메이션 오라)
         function runCustomIntro(nickname, username, avatarUrl, onComplete) {
             const introOverlay = document.getElementById('intro-overlay');
             const introProgress = document.getElementById('intro-progress');
@@ -561,7 +571,7 @@ MAIN_HTML_TEMPLATE = """
             introAvatar.src = avatarUrl;
             introOverlay.style.display = 'flex';
 
-            const totalDuration = 3000;
+            const totalDuration = 2000;
             const startTime = performance.now();
 
             function updateLoading(currentTime) {
@@ -584,7 +594,7 @@ MAIN_HTML_TEMPLATE = """
                             introOverlay.style.display = 'none';
                             onComplete();
                         }, 800);
-                    }, 1500);
+                    }, 1200);
                 }
             }
             requestAnimationFrame(updateLoading);
@@ -678,7 +688,6 @@ MAIN_HTML_TEMPLATE = """
             }
         }
 
-        // 매뉴얼 수정 드롭다운 선택 시 자동 스크롤 개선
         function onManualSelectToEdit(val) {
             const idx = parseInt(val);
             if (idx === -1) {
@@ -693,7 +702,6 @@ MAIN_HTML_TEMPLATE = """
                     document.getElementById('m-edit-content').value = current.content || '';
                 }
             }
-            // 폼 카드 위치로 스크롤
             const editCard = document.getElementById('manual-edit-card');
             if (editCard) editCard.scrollIntoView({ behavior: 'smooth' });
         }
@@ -730,42 +738,100 @@ MAIN_HTML_TEMPLATE = """
             transitionToTab(`view-admin-${tabName}`);
         }
 
+        function maskId(idStr) {
+            if (!idStr || idStr.length < 6) return idStr;
+            return idStr.substring(0, 4) + '*'.repeat(idStr.length - 4);
+        }
+
+        function toggleIdVisibility(maskedElemId, fullElemId) {
+            const masked = document.getElementById(maskedElemId);
+            const full = document.getElementById(fullElemId);
+            if (masked && full) {
+                if (full.style.display === 'none') {
+                    full.style.display = 'inline';
+                    masked.style.display = 'none';
+                } else {
+                    full.style.display = 'none';
+                    masked.style.display = 'inline';
+                }
+            }
+        }
+
         function renderAdminViews() {
             if (appState.role !== 'admin') return;
 
             const adminSet = new Set(appState.admin_whitelist || []);
+            const profiles = appState.user_profiles || {};
 
             const wlList = document.getElementById('perm-wl-list');
-            wlList.innerHTML = appState.user_whitelist.map(id => `
+            wlList.innerHTML = appState.user_whitelist.map(id => {
+                const prof = profiles[id] || { username: 'Discord User', global_name: '스태프', avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png' };
+                return `
                 <li>
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                        <input type="checkbox" class="wl-check" value="${id}" style="width:auto;">
-                        <span>${id} ${adminSet.has(id) ? '<span style="color:#38bdf8; font-size:11px;">[👑 어드민]</span>' : ''}</span>
-                    </label>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <input type="checkbox" class="wl-check" value="${id}" style="width:auto; margin:0;">
+                        <img src="${prof.avatar_url}" class="user-card-avatar" alt="Avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                        <div class="user-card-names">
+                            <div class="user-card-nick">${prof.global_name || prof.username} ${adminSet.has(id) ? '<span style="color:#38bdf8; font-size:11px;">[👑 어드민]</span>' : ''}</div>
+                            <div class="user-card-sub">
+                                <span id="wl-m-${id}">${maskId(id)}</span>
+                                <span id="wl-f-${id}" style="display:none;">${id}</span>
+                                <button class="eye-btn" onclick="toggleIdVisibility('wl-m-${id}', 'wl-f-${id}')">👁️</button>
+                            </div>
+                        </div>
+                    </div>
                     <button class="btn-ui btn-danger" style="padding:4px 8px; font-size:11px;" onclick="updatePermission('whitelist', 'remove', '${id}')">제거</button>
                 </li>
-            `).join('');
+            `}).join('');
 
             const blList = document.getElementById('perm-bl-list');
-            blList.innerHTML = appState.user_blacklist.map(id => `
+            blList.innerHTML = appState.user_blacklist.map(id => {
+                const prof = profiles[id] || { username: 'Discord User', global_name: '차단 유저', avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png' };
+                return `
                 <li>
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                        <input type="checkbox" class="bl-check" value="${id}" style="width:auto;">
-                        <span>${id}</span>
-                    </label>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <input type="checkbox" class="bl-check" value="${id}" style="width:auto; margin:0;">
+                        <img src="${prof.avatar_url}" class="user-card-avatar" alt="Avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                        <div class="user-card-names">
+                            <div class="user-card-nick">${prof.global_name || prof.username}</div>
+                            <div class="user-card-sub">
+                                <span id="bl-m-${id}">${maskId(id)}</span>
+                                <span id="bl-f-${id}" style="display:none;">${id}</span>
+                                <button class="eye-btn" onclick="toggleIdVisibility('bl-m-${id}', 'bl-f-${id}')">👁️</button>
+                            </div>
+                        </div>
+                    </div>
                     <button class="btn-ui btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="updatePermission('blacklist', 'remove', '${id}')">해제</button>
                 </li>
-            `).join('');
+            `}).join('');
 
             const logBox = document.getElementById('admin-log-box');
             logBox.innerHTML = appState.logs.map(log => `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(255,255,255,0.05); padding-bottom:4px;">${log}</div>`).join('');
+        }
+
+        // 특정 ID 실시간 조회 및 프로필 노출
+        async function searchAndDisplayUser() {
+            const targetId = document.getElementById('perm-target-id').value.trim();
+            if (!targetId) return showNotification("조회할 디스코드 ID를 입력해주세요.");
+
+            const res = await fetch(`/api/admin/user_info/${targetId}`);
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('sc-avatar').src = data.avatar_url;
+                document.getElementById('sc-nick').innerText = `${data.global_name} (@${data.username})`;
+                document.getElementById('sc-id-masked').innerText = maskId(data.id);
+                document.getElementById('sc-id-full').innerText = data.id;
+                document.getElementById('searched-user-card').style.display = 'block';
+                showNotification("사용자 정보를 성공적으로 불러왔습니다.");
+            } else {
+                showNotification("해당 ID의 사용자를 찾을 수 없습니다.");
+            }
         }
 
         function toggleSelectAll(className, isChecked) {
             document.querySelectorAll('.' + className).forEach(cb => cb.checked = isChecked);
         }
 
-        // 다중 사용자 일괄 처리 함수
         async function batchAction(actionType) {
             const checkedWL = Array.from(document.querySelectorAll('.wl-check:checked')).map(cb => cb.value);
             const checkedBL = Array.from(document.querySelectorAll('.bl-check:checked')).map(cb => cb.value);
@@ -785,19 +851,19 @@ MAIN_HTML_TEMPLATE = """
             }
         }
 
-        // 전체 등록 유저 및 접속 유저 대상 @자동완성 스캔 보완
         function onUserIdInput(val) {
             const dropdown = document.getElementById('mention-dropdown');
             if (val.startsWith('@')) {
                 const query = val.substring(1).toLowerCase();
                 
-                // 시스템 내 모든 등록 유저 스캔
                 const allScanUsers = [];
                 if (appState.user) {
                     allScanUsers.push({ id: appState.user.id, name: appState.user.global_name || appState.user.username });
                 }
-                (appState.user_whitelist || []).forEach(id => allScanUsers.push({ id, name: `스태프 (${id})` }));
-                (appState.user_blacklist || []).forEach(id => allScanUsers.push({ id, name: `차단 유저 (${id})` }));
+                (appState.user_whitelist || []).forEach(id => {
+                    const prof = (appState.user_profiles || {})[id];
+                    allScanUsers.push({ id, name: prof ? (prof.global_name || prof.username) : `스태프 (${id})` });
+                });
 
                 const filtered = allScanUsers.filter(u => u.name.toLowerCase().includes(query) || u.id.includes(query));
 
@@ -807,7 +873,7 @@ MAIN_HTML_TEMPLATE = """
                             <span style="font-size:16px;">👤</span>
                             <div>
                                 <div style="font-size:13px; font-weight:bold; color:#fff;">${u.name}</div>
-                                <div style="font-size:11px; color:#8a99ad;">ID: ${u.id}</div>
+                                <div style="font-size:11px; color:#8a99ad;">ID: ${maskId(u.id)}</div>
                             </div>
                         </div>
                     `).join('');
@@ -823,6 +889,7 @@ MAIN_HTML_TEMPLATE = """
         function selectMentionUser(id) {
             document.getElementById('perm-target-id').value = id;
             document.getElementById('mention-dropdown').style.display = 'none';
+            searchAndDisplayUser();
         }
 
         async function saveManualData() {
@@ -896,7 +963,11 @@ MAIN_HTML_TEMPLATE = """
 
             if (res.ok) {
                 showNotification(`권한 변경 완료: ${target} (${action})`);
-                if (!explicitId) document.getElementById('perm-target-id').value = '';
+                if (!explicitId) {
+                    document.getElementById('perm-target-id').value = '';
+                    document.getElementById('searched-user-card').style.display = 'none';
+                }
+                // 실시간 동기화 호출 (새로고침 불필요)
                 syncSystemState();
             }
         }
@@ -945,6 +1016,13 @@ def callback():
         user_id = str(session["user"]["id"])
         user_name = session["user"].get("global_name") or session["user"].get("username")
         
+        if "user_profiles" not in data: data["user_profiles"] = {}
+        data["user_profiles"][user_id] = {
+            "username": session["user"].get("username"),
+            "global_name": session["user"].get("global_name") or session["user"].get("username"),
+            "avatar_url": f"https://cdn.discordapp.com/avatars/{user_id}/{session['user'].get('avatar')}.png" if session["user"].get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
+        }
+
         add_log(data, "인증", user_name, f"시스템 로그인 성공 (ID: {user_id})")
         save_data(data)
 
@@ -984,7 +1062,29 @@ def get_state():
         "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
         "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
         "admin_whitelist": data.get("admin_whitelist", []) if role == "admin" else [],
+        "user_profiles": data.get("user_profiles", {}),
         "logs": data.get("logs", []) if role == "admin" else []
+    })
+
+# 디스코드 사용자 프로필 실시간 정보 조회 API
+@app.route("/api/admin/user_info/<user_id>")
+def get_user_info(user_id):
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    profiles = data.get("user_profiles", {})
+
+    if user_id in profiles:
+        prof = profiles[user_id]
+        return jsonify({"id": user_id, "username": prof.get("username"), "global_name": prof.get("global_name"), "avatar_url": prof.get("avatar_url")})
+
+    return jsonify({
+        "id": user_id,
+        "username": f"user_{user_id[-4:]}",
+        "global_name": f"스태프 ({user_id[-4:]})",
+        "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png"
     })
 
 @app.route("/api/log/action", methods=["POST"])
@@ -1109,7 +1209,6 @@ def admin_permission():
     save_data(data)
     return jsonify({"status": "success"})
 
-# 다중 선택 일괄 권한 처리 라우트
 @app.route("/api/admin/permission/batch", methods=["POST"])
 def admin_permission_batch():
     user = session.get("user")
