@@ -283,11 +283,11 @@ MAIN_HTML_TEMPLATE = """
         .user-card-info { display: flex; align-items: center; gap: 12px; }
         .user-card-avatar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #00ffaa; object-fit: cover; }
         .user-card-names { display: flex; flex-direction: column; }
-        .user-card-nick { font-weight: bold; color: var(--text-main); font-size: 14px; display: flex; align-items: center; gap: 6px; }
+        .user-card-nick { font-weight: bold; color: var(--text-main); font-size: 14px; }
         .user-card-sub { font-size: 12px; color: #00ffaa; display: flex; align-items: center; gap: 6px; }
         body.day-theme .user-card-sub { color: #0284c7; }
-        .eye-btn, .edit-name-btn { cursor: pointer; background: transparent; border: none; color: var(--text-sub); font-size: 13px; margin-left: 2px; }
-        .eye-btn:hover, .edit-name-btn:hover { color: #00ffaa; }
+        .eye-btn { cursor: pointer; background: transparent; border: none; color: var(--text-sub); font-size: 13px; margin-left: 4px; }
+        .eye-btn:hover { color: #00ffaa; }
 
         .mention-dropdown {
             position: absolute; top: 45px; left: 0; right: 0; z-index: 1000;
@@ -544,9 +544,6 @@ MAIN_HTML_TEMPLATE = """
     </div>
 
     <script>
-        // --------------------------------------------------
-        // ☀️/🌙 낮 모드 - 밤 모드 및 Canvas 동적 배경 로직
-        // --------------------------------------------------
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
 
@@ -707,9 +704,6 @@ MAIN_HTML_TEMPLATE = """
         }
         animate();
 
-        // --------------------------------------------------
-        // 시스템 상태 및 이벤트 핸들러
-        // --------------------------------------------------
         let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [] };
         let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
@@ -937,25 +931,6 @@ MAIN_HTML_TEMPLATE = """
             }
         }
 
-        // 직원 이름 수정 함수
-        async function editUserName(userId, currentName) {
-            const newName = prompt("새로운 직원 이름을 입력하세요:", currentName);
-            if (!newName || newName.trim() === "" || newName === currentName) return;
-
-            const res = await fetch('/api/admin/user_name/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: userId, name: newName.trim() })
-            });
-
-            if (res.ok) {
-                showNotification("직원 이름이 성공적으로 변경되어 저장되었습니다.");
-                syncSystemState();
-            } else {
-                showNotification("직원 이름 변경 실패");
-            }
-        }
-
         function renderAdminViews() {
             if (appState.role !== 'admin') return;
 
@@ -965,18 +940,13 @@ MAIN_HTML_TEMPLATE = """
             const wlList = document.getElementById('perm-wl-list');
             wlList.innerHTML = appState.user_whitelist.map(id => {
                 const prof = profiles[id] || { username: 'Discord User', global_name: '스태프', avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png' };
-                const displayName = prof.global_name || prof.username;
                 return `
                 <li>
                     <div style="display:flex; align-items:center; gap:10px;">
                         <input type="checkbox" class="wl-check" value="${id}" style="width:auto; margin:0;">
                         <img src="${prof.avatar_url}" class="user-card-avatar" alt="Avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
                         <div class="user-card-names">
-                            <div class="user-card-nick">
-                                <span>${displayName}</span>
-                                <button class="edit-name-btn" onclick="editUserName('${id}', '${displayName.replace(/'/g, "\\'")}')" title="직원 이름 수정">✏️</button>
-                                ${adminSet.has(id) ? '<span style="color:#38bdf8; font-size:11px;">[👑 어드민]</span>' : ''}
-                            </div>
+                            <div class="user-card-nick">${prof.global_name || prof.username} ${adminSet.has(id) ? '<span style="color:#38bdf8; font-size:11px;">[👑 어드민]</span>' : ''}</div>
                             <div class="user-card-sub">
                                 <span id="wl-m-${id}">${maskId(id)}</span>
                                 <span id="wl-f-${id}" style="display:none;">${id}</span>
@@ -991,17 +961,13 @@ MAIN_HTML_TEMPLATE = """
             const blList = document.getElementById('perm-bl-list');
             blList.innerHTML = appState.user_blacklist.map(id => {
                 const prof = profiles[id] || { username: 'Discord User', global_name: '차단 유저', avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png' };
-                const displayName = prof.global_name || prof.username;
                 return `
                 <li>
                     <div style="display:flex; align-items:center; gap:10px;">
                         <input type="checkbox" class="bl-check" value="${id}" style="width:auto; margin:0;">
                         <img src="${prof.avatar_url}" class="user-card-avatar" alt="Avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
                         <div class="user-card-names">
-                            <div class="user-card-nick">
-                                <span>${displayName}</span>
-                                <button class="edit-name-btn" onclick="editUserName('${id}', '${displayName.replace(/'/g, "\\'")}')" title="직원 이름 수정">✏️</button>
-                            </div>
+                            <div class="user-card-nick">${prof.global_name || prof.username}</div>
                             <div class="user-card-sub">
                                 <span id="bl-m-${id}">${maskId(id)}</span>
                                 <span id="bl-f-${id}" style="display:none;">${id}</span>
@@ -1223,12 +1189,11 @@ def callback():
         user_name = session["user"].get("global_name") or session["user"].get("username")
         
         if "user_profiles" not in data: data["user_profiles"] = {}
-        if user_id not in data["user_profiles"]:
-            data["user_profiles"][user_id] = {
-                "username": session["user"].get("username"),
-                "global_name": session["user"].get("global_name") or session["user"].get("username"),
-                "avatar_url": f"https://cdn.discordapp.com/avatars/{user_id}/{session['user'].get('avatar')}.png" if session["user"].get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
-            }
+        data["user_profiles"][user_id] = {
+            "username": session["user"].get("username"),
+            "global_name": session["user"].get("global_name") or session["user"].get("username"),
+            "avatar_url": f"https://cdn.discordapp.com/avatars/{user_id}/{session['user'].get('avatar')}.png" if session["user"].get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
+        }
 
         add_log(data, "인증", user_name, f"시스템 로그인 성공 (ID: {user_id})")
         save_data(data)
@@ -1292,41 +1257,6 @@ def get_user_info(user_id):
         "global_name": f"스태프 ({user_id[-4:]})",
         "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png"
     })
-
-@app.route("/api/admin/user_name/update", methods=["POST"])
-def update_user_name():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
-
-    req_data = request.json or {}
-    target_id = str(req_data.get("user_id"))
-    new_name = req_data.get("name")
-
-    if not target_id or not new_name:
-        return jsonify({"error": "invalid_params"}), 400
-
-    if "user_profiles" not in data:
-        data["user_profiles"] = {}
-
-    if target_id not in data["user_profiles"]:
-        data["user_profiles"][target_id] = {
-            "username": f"user_{target_id[-4:]}",
-            "global_name": new_name,
-            "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png"
-        }
-    else:
-        data["user_profiles"][target_id]["global_name"] = new_name
-
-    admin_name = user.get("global_name") or user.get("username")
-    add_log(data, "직원 정보 변경", admin_name, f"유저 {target_id}의 이름을 '{new_name}'(으)로 변경")
-    save_data(data)
-
-    return jsonify({"status": "success"})
 
 @app.route("/api/log/action", methods=["POST"])
 def log_action():
@@ -1482,7 +1412,7 @@ def admin_permission_batch():
         elif action == "remove":
             if uid in data.get("user_whitelist", []):
                 data["user_whitelist"].remove(uid)
-            if uid in data.get("user_blacklist", []):
+            if uid in data.get("blacklist", []):
                 data["user_blacklist"].remove(uid)
 
     add_log(data, "일괄 권한 변경", user_name, f"유저 {len(user_ids)}명에 대해 '{action}' 처리 수행")
