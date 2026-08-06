@@ -3,6 +3,7 @@ import json
 import base64
 import datetime
 import random
+import time
 from flask import Flask, request, render_template_string, redirect, session, jsonify
 import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -16,7 +17,7 @@ app.secret_key = os.urandom(24)
 # ==========================================
 CLIENT_ID = "1534184089144266872"
 CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm")
-BASE_URL = "https://sky-aurora-staff.onrender.com"
+BASE_URL = os.environ.get("BASE_URL", "https://sky-aurora-staff.onrender.com")
 
 ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
 DATA_FILE = "sky_aurora_admin_data.json"
@@ -28,7 +29,16 @@ GITHUB_REPO = os.environ.get("GITHUB_REPO")
 # --------------------------------------------------
 # 📁 데이터 불러오기 및 영구 저장 로직
 # --------------------------------------------------
+def ensure_manual_ids(data):
+    """모든 매뉴얼 항목이 고유 id를 가지도록 보장"""
+    manuals = data.get("manuals", [])
+    for idx, item in enumerate(manuals):
+        if "id" not in item or not item["id"]:
+            item["id"] = int(time.time() * 1000) + idx
+    return data
+
 def load_data():
+    data = None
     if GITHUB_TOKEN and GITHUB_REPO:
         try:
             url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
@@ -38,45 +48,51 @@ def load_data():
                 content = res.json()["content"]
                 decoded_data = base64.b64decode(content).decode('utf-8')
                 data = json.loads(decoded_data)
-                for admin_id in DEFAULT_ADMINS:
-                    if admin_id not in data.get("admin_whitelist", []):
-                        data.setdefault("admin_whitelist", []).append(admin_id)
-                return data
         except Exception as e:
             print(f"[GitHub Sync Load Error] {e}")
 
-    if os.path.exists(DATA_FILE):
+    if not data and os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                for admin_id in DEFAULT_ADMINS:
-                    if admin_id not in data.get("admin_whitelist", []):
-                        data.setdefault("admin_whitelist", []).append(admin_id)
-                return data
         except Exception:
             pass
 
-    return {
-        "admin_whitelist": DEFAULT_ADMINS,
-        "user_whitelist": [],
-        "user_blacklist": [],
-        "user_profiles": {}, # 사용자 프로필 캐시 (id: {username, global_name, avatar})
-        "manuals": [
-            {
-                "id": 1,
-                "category": "보안 지침",
-                "pinned": True,
-                "title": "01. 기본 보안 규칙",
-                "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템 화면 캡처 및 무단 촬영 금지\n2. 계정 타인 공유 금지\n3. 접속 IP 및 접근 기록 실시간 로깅 중"
-            }
-        ],
-        "logs": []
-    }
+    if not data:
+        data = {
+            "admin_whitelist": DEFAULT_ADMINS,
+            "user_whitelist": [],
+            "user_blacklist": [],
+            "user_profiles": {},
+            "manuals": [
+                {
+                    "id": 1,
+                    "category": "보안 지침",
+                    "pinned": True,
+                    "title": "01. 기본 보안 규칙",
+                    "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템 화면 캡처 및 무단 촬영 금지\n2. 계정 타인 공유 금지\n3. 접속 IP 및 접근 기록 실시간 로깅 중"
+                }
+            ],
+            "logs": []
+        }
+
+    for admin_id in DEFAULT_ADMINS:
+        if admin_id not in data.setdefault("admin_whitelist", []):
+            data["admin_whitelist"].append(admin_id)
+
+    return ensure_manual_ids(data)
 
 def save_data(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    data = ensure_manual_ids(data)
+    
+    # 1. 로컬 저장
+    try:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[Local Save Error] {e}")
 
+    # 2. GitHub 동기화 저장
     if GITHUB_TOKEN and GITHUB_REPO:
         try:
             url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
@@ -85,7 +101,7 @@ def save_data(data):
             sha = get_res.json().get("sha") if get_res.status_code == 200 else None
             
             json_str = json.dumps(data, ensure_ascii=False, indent=2)
-            encoded_content = base64.b64decode(json_str.encode('utf-8')).decode('utf-8')
+            encoded_content = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
             
             payload = {
                 "message": f"Auto-sync manual data [{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
@@ -431,7 +447,6 @@ MAIN_HTML_TEMPLATE = """
                             </div>
                             <div id="mention-dropdown" class="mention-dropdown"></div>
 
-                            <!-- 조회된 사용자 실시간 정보 카드 -->
                             <div id="searched-user-card" style="display:none; background:rgba(0, 255, 170, 0.05); border:1px solid #00ffaa; padding:12px; border-radius:12px; margin-bottom:12px;">
                                 <div class="user-card-info">
                                     <img id="sc-avatar" src="" class="user-card-avatar" alt="Avatar">
@@ -458,7 +473,6 @@ MAIN_HTML_TEMPLATE = """
                         </div>
                     </div>
 
-                    <!-- 다중 선택 일괄 제어 패널 -->
                     <div class="content-card" style="margin-bottom:20px;">
                         <h3 style="font-size:14px; color:#00ffaa; margin-bottom:10px;">⚡ 선택 유저 일괄 제어</h3>
                         <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -531,7 +545,7 @@ MAIN_HTML_TEMPLATE = """
         animate();
 
         let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [] };
-        let selectedManualIndex = 0;
+        let selectedManualId = null;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
 
@@ -629,8 +643,12 @@ MAIN_HTML_TEMPLATE = """
             const editSelect = document.getElementById('m-select-edit');
             if (editSelect) editSelect.innerHTML = '<option value="-1">-- 새 매뉴얼 작성 --</option>';
 
-            const sortedManuals = [...appState.manuals].map((m, originalIdx) => ({ ...m, originalIdx }));
+            const sortedManuals = [...appState.manuals];
             sortedManuals.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+            if (!selectedManualId && sortedManuals.length > 0) {
+                selectedManualId = sortedManuals[0].id;
+            }
 
             const categories = {};
             sortedManuals.forEach(item => {
@@ -647,9 +665,9 @@ MAIN_HTML_TEMPLATE = """
 
                 items.forEach(m => {
                     const wrapper = document.createElement('div');
-                    wrapper.className = `aurora-btn-wrapper ${m.originalIdx === selectedManualIndex ? 'active' : ''}`;
+                    wrapper.className = `aurora-btn-wrapper ${m.id === selectedManualId ? 'active' : ''}`;
                     wrapper.innerHTML = `
-                        <button class="item-btn" onclick="selectManualItem(${m.originalIdx})">
+                        <button class="item-btn" onclick="selectManualItem(${m.id})">
                             <span>${m.pinned ? '<span class="pin-badge">📌</span>' : ''}${m.title}</span>
                         </button>
                     `;
@@ -657,29 +675,30 @@ MAIN_HTML_TEMPLATE = """
 
                     if (editSelect) {
                         const opt = document.createElement('option');
-                        opt.value = m.originalIdx;
+                        opt.value = m.id;
                         opt.innerText = `[${catName}] ${m.title}`;
+                        if (m.id === selectedManualId) opt.selected = true;
                         editSelect.appendChild(opt);
                     }
                 });
             }
 
-            if (appState.manuals.length > 0) {
-                const current = appState.manuals[selectedManualIndex] || appState.manuals[0];
+            const current = appState.manuals.find(m => m.id === selectedManualId);
+            if (current) {
                 document.getElementById('doc-title').innerText = `${current.pinned ? '📌 ' : ''}${current.title}`;
                 document.getElementById('doc-body').innerText = current.content;
             }
         }
 
-        function selectManualItem(idx) {
-            selectedManualIndex = idx;
+        function selectManualItem(id) {
+            selectedManualId = id;
             renderCategorizedSidebar();
             transitionToTab('view-manual');
             
             if (appState.role === 'admin') {
-                const current = appState.manuals[idx];
+                const current = appState.manuals.find(m => m.id === id);
                 if (current) {
-                    document.getElementById('m-select-edit').value = idx;
+                    document.getElementById('m-select-edit').value = id;
                     document.getElementById('m-edit-category').value = current.category || '';
                     document.getElementById('m-edit-pinned').checked = !!current.pinned;
                     document.getElementById('m-edit-title').value = current.title || '';
@@ -689,18 +708,11 @@ MAIN_HTML_TEMPLATE = """
         }
 
         function onManualSelectToEdit(val) {
-            const idx = parseInt(val);
-            if (idx === -1) {
+            const id = parseInt(val);
+            if (id === -1) {
                 resetManualForm();
             } else {
-                selectedManualIndex = idx;
-                const current = appState.manuals[idx];
-                if (current) {
-                    document.getElementById('m-edit-category').value = current.category || '';
-                    document.getElementById('m-edit-pinned').checked = !!current.pinned;
-                    document.getElementById('m-edit-title').value = current.title || '';
-                    document.getElementById('m-edit-content').value = current.content || '';
-                }
+                selectManualItem(id);
             }
             const editCard = document.getElementById('manual-edit-card');
             if (editCard) editCard.scrollIntoView({ behavior: 'smooth' });
@@ -809,7 +821,6 @@ MAIN_HTML_TEMPLATE = """
             logBox.innerHTML = appState.logs.map(log => `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(255,255,255,0.05); padding-bottom:4px;">${log}</div>`).join('');
         }
 
-        // 특정 ID 실시간 조회 및 프로필 노출
         async function searchAndDisplayUser() {
             const targetId = document.getElementById('perm-target-id').value.trim();
             if (!targetId) return showNotification("조회할 디스코드 ID를 입력해주세요.");
@@ -903,10 +914,12 @@ MAIN_HTML_TEMPLATE = """
             const res = await fetch('/api/admin/manual', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index: selectedManualIndex, category, pinned, title, content })
+                body: JSON.stringify({ id: selectedManualId, category, pinned, title, content })
             });
 
             if (res.ok) {
+                const data = await res.json();
+                if (data.id) selectedManualId = data.id;
                 showNotification("매뉴얼이 저장되었습니다.");
                 syncSystemState();
             }
@@ -924,24 +937,25 @@ MAIN_HTML_TEMPLATE = """
         }
 
         async function deleteManualData() {
+            if (!selectedManualId) return showNotification("삭제할 매뉴얼을 선택해주세요.");
             if (!confirm("정말 이 매뉴얼을 삭제하시겠습니까?")) return;
 
             const res = await fetch('/api/admin/manual/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index: selectedManualIndex })
+                body: JSON.stringify({ id: selectedManualId })
             });
 
             if (res.ok) {
                 showNotification("매뉴얼이 삭제되었습니다.");
-                selectedManualIndex = 0;
+                selectedManualId = null;
                 resetManualForm();
                 syncSystemState();
             }
         }
 
         function resetManualForm() {
-            selectedManualIndex = appState.manuals.length;
+            selectedManualId = null;
             document.getElementById('m-select-edit').value = -1;
             document.getElementById('m-edit-category').value = '';
             document.getElementById('m-edit-pinned').checked = false;
@@ -967,7 +981,6 @@ MAIN_HTML_TEMPLATE = """
                     document.getElementById('perm-target-id').value = '';
                     document.getElementById('searched-user-card').style.display = 'none';
                 }
-                // 실시간 동기화 호출 (새로고침 불필요)
                 syncSystemState();
             }
         }
@@ -1066,7 +1079,6 @@ def get_state():
         "logs": data.get("logs", []) if role == "admin" else []
     })
 
-# 디스코드 사용자 프로필 실시간 정보 조회 API
 @app.route("/api/admin/user_info/<user_id>")
 def get_user_info(user_id):
     user = session.get("user")
@@ -1082,8 +1094,8 @@ def get_user_info(user_id):
 
     return jsonify({
         "id": user_id,
-        "username": f"user_{user_id[-4:]}",
-        "global_name": f"스태프 ({user_id[-4:]})",
+        "username": f"user_{user_id[-4:] if len(user_id) >= 4 else user_id}",
+        "global_name": f"스태프 ({user_id[-4:] if len(user_id) >= 4 else user_id})",
         "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png"
     })
 
@@ -1114,30 +1126,43 @@ def admin_manual():
         return jsonify({"error": "forbidden"}), 403
 
     req_data = request.json or {}
-    idx = req_data.get("index")
+    m_id = req_data.get("id")
     category = req_data.get("category", "공통 매뉴얼")
     pinned = req_data.get("pinned", False)
     title = req_data.get("title")
     content = req_data.get("content")
 
     user_name = user.get("global_name") or user.get("username")
-    manual_item = {
-        "id": int(datetime.datetime.now().timestamp()),
-        "category": category,
-        "pinned": pinned,
-        "title": title,
-        "content": content
-    }
+    
+    # 고유 ID로 해당 매뉴얼 탐색
+    target_item = None
+    if m_id is not None:
+        for item in data.get("manuals", []):
+            if item.get("id") == m_id:
+                target_item = item
+                break
 
-    if idx is not None and 0 <= idx < len(data["manuals"]):
-        data["manuals"][idx] = manual_item
+    if target_item:
+        target_item["category"] = category
+        target_item["pinned"] = pinned
+        target_item["title"] = title
+        target_item["content"] = content
         add_log(data, "매뉴얼 수정", user_name, f"매뉴얼 '{title}' 수정 완료")
     else:
-        data["manuals"].append(manual_item)
+        new_id = int(time.time() * 1000)
+        manual_item = {
+            "id": new_id,
+            "category": category,
+            "pinned": pinned,
+            "title": title,
+            "content": content
+        }
+        data.setdefault("manuals", []).append(manual_item)
+        m_id = new_id
         add_log(data, "매뉴얼 등록", user_name, f"새 매뉴얼 '{title}' 등록 완료")
 
     save_data(data)
-    return jsonify({"status": "success"})
+    return jsonify({"status": "success", "id": m_id})
 
 @app.route("/api/admin/manual/delete", methods=["POST"])
 def admin_manual_delete():
@@ -1149,12 +1174,16 @@ def admin_manual_delete():
     if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
         return jsonify({"error": "forbidden"}), 403
 
-    idx = request.json.get("index")
-    if idx is not None and 0 <= idx < len(data["manuals"]):
-        deleted = data["manuals"].pop(idx)
-        user_name = user.get("global_name") or user.get("username")
-        add_log(data, "매뉴얼 삭제", user_name, f"매뉴얼 '{deleted.get('title')}' 삭제 완료")
-        save_data(data)
+    m_id = request.json.get("id")
+    if m_id is not None:
+        manuals = data.get("manuals", [])
+        for idx, item in enumerate(manuals):
+            if item.get("id") == m_id:
+                deleted = manuals.pop(idx)
+                user_name = user.get("global_name") or user.get("username")
+                add_log(data, "매뉴얼 삭제", user_name, f"매뉴얼 '{deleted.get('title')}' 삭제 완료")
+                save_data(data)
+                break
 
     return jsonify({"status": "success"})
 
@@ -1172,8 +1201,6 @@ def admin_permission():
     action = request.json.get("action")
     target_id = str(request.json.get("user_id"))
     is_admin = request.json.get("is_admin", False)
-
-    user_name = user.get("global_name") or user.get("username")
 
     if target == "whitelist":
         if action == "add":
