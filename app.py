@@ -553,6 +553,7 @@ MAIN_HTML_TEMPLATE = """
         let currentMode = localStorage.getItem('sky_theme_mode') || 'night';
         let progress = currentMode === 'day' ? 1.0 : 0.0;
         let targetProgress = progress;
+        let isSetting = currentMode === 'night'; // 해가 뜨는지 지는지 판별 변수 추가
 
         applyThemeUI(currentMode);
 
@@ -560,9 +561,11 @@ MAIN_HTML_TEMPLATE = """
             if (targetProgress === 0) {
                 targetProgress = 1.0;
                 currentMode = 'day';
+                isSetting = false; // 낮으로 전환 (해가 왼쪽에서 중앙으로 뜸)
             } else {
                 targetProgress = 0.0;
                 currentMode = 'night';
+                isSetting = true; // 밤으로 전환 (해가 중앙에서 오른쪽으로 짐)
             }
             localStorage.setItem('sky_theme_mode', currentMode);
             applyThemeUI(currentMode);
@@ -606,23 +609,38 @@ MAIN_HTML_TEMPLATE = """
 
         let tick = 0;
 
-        function drawSunRays(sunX, sunY, opacity) {
+        // 욱일기 형태를 제거하고 나른한 오후 창문 햇빛(Volumetric light) 스타일로 수정
+        function drawSunRays(sunX, sunY, opacity, sunsetGlow) {
             if (opacity <= 0) return;
             ctx.save();
             ctx.translate(sunX, sunY);
-            const rayCount = 12;
-            const rayLength = Math.max(canvas.width, canvas.height) * 0.8;
             
-            for (let i = 0; i < rayCount; i++) {
-                const angle = (i * Math.PI * 2) / rayCount + tick * 0.05;
+            const rayLength = Math.max(canvas.width, canvas.height) * 1.5;
+            // 360도가 아닌 창문을 뚫고 비스듬히 떨어지는 각도 지정
+            const baseAngles = [Math.PI/3.5, Math.PI/2.5, Math.PI/1.8, Math.PI/1.2]; 
+            const widths = [0.18, 0.08, 0.22, 0.12]; // 굵기를 불규칙하게 조절
+
+            for (let i = 0; i < baseAngles.length; i++) {
+                // tick을 활용해 나른하게 살랑이는 빛줄기 연출
+                const angle = baseAngles[i] + Math.sin(tick * 0.15 + i) * 0.08;
+                const width = widths[i] + Math.cos(tick * 0.1 + i) * 0.04;
+
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
-                ctx.arc(0, 0, rayLength, angle - 0.08, angle + 0.08);
+                ctx.arc(0, 0, rayLength, angle - width, angle + width);
                 ctx.closePath();
                 
                 const rayGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, rayLength);
-                rayGrad.addColorStop(0, `rgba(255, 253, 224, ${0.3 * opacity})`);
+                
+                // 노을이 질 때 빛줄기도 붉게 물들도록 색상 동적 계산
+                const r = 255;
+                const g = 250 - sunsetGlow * 80;
+                const b = 224 - sunsetGlow * 150;
+                
+                rayGrad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.4 * opacity})`);
                 rayGrad.addColorStop(1, `rgba(255, 255, 255, 0)`);
+                
+                ctx.globalCompositeOperation = 'screen';
                 ctx.fillStyle = rayGrad;
                 ctx.fill();
             }
@@ -647,7 +665,10 @@ MAIN_HTML_TEMPLATE = """
         }
 
         function animate() {
-            progress += (targetProgress - progress) * 0.03;
+            progress += (targetProgress - progress) * 0.02; // 부드러운 전환을 위해 속도 미세 조정
+
+            // 노을(주황빛) 강도 계산: 전환되는 중간 시점(progress 0.5 부근)에 가장 진하게 연출
+            const sunsetOpacity = Math.max(0, 1 - Math.abs(progress - 0.5) * 2.2);
 
             const skyTop = interpolateColor('#030509', '#38bdf8', progress);
             const skyBottom = interpolateColor('#0a1020', '#bae6fd', progress);
@@ -657,6 +678,20 @@ MAIN_HTML_TEMPLATE = """
             bgGrad.addColorStop(1, skyBottom);
             ctx.fillStyle = bgGrad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 들어오고 나갈 때 뜨는 주황빛 노을 그라데이션 레이어 합성
+            if (sunsetOpacity > 0.01) {
+                const sunsetLayer = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                sunsetLayer.addColorStop(0, `rgba(255, 100, 50, ${sunsetOpacity * 0.4})`);
+                sunsetLayer.addColorStop(0.5, `rgba(255, 130, 0, ${sunsetOpacity * 0.6})`);
+                sunsetLayer.addColorStop(1, `rgba(255, 180, 80, ${sunsetOpacity * 0.8})`);
+                
+                ctx.save();
+                ctx.globalCompositeOperation = 'color-dodge'; // 하늘색과 자연스럽게 주황빛 혼합
+                ctx.fillStyle = sunsetLayer;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.restore();
+            }
 
             tick += 0.015;
 
@@ -677,25 +712,39 @@ MAIN_HTML_TEMPLATE = """
             drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraOpacity);
 
             if (progress > 0.01) {
-                const sunX = canvas.width * 0.2 + progress * (canvas.width * 0.6);
-                const sunY = canvas.height * 1.1 - progress * (canvas.height * 0.8);
+                // 해 위치: isSetting이 false(뜨는 중)면 왼쪽에서 중앙으로, true(지는 중)면 중앙에서 오른쪽으로
+                let sunX;
+                if (!isSetting) {
+                    sunX = canvas.width * 0.1 + progress * (canvas.width * 0.4); 
+                } else {
+                    sunX = canvas.width * 0.9 - progress * (canvas.width * 0.4);
+                }
+                
+                // 포물선 형태의 궤적을 그리며 뜸/짐
+                const sunY = canvas.height * 1.1 - Math.sin(progress * Math.PI / 2) * (canvas.height * 0.85);
 
-                const glowGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 250);
-                glowGrad.addColorStop(0, `rgba(255, 245, 180, ${0.8 * progress})`);
-                glowGrad.addColorStop(0.5, `rgba(255, 200, 100, ${0.3 * progress})`);
+                // 햇빛 색상: 낮에는 하얗고 노을 질 때는 붉게 변함
+                const r = 255;
+                const g = 245 - sunsetOpacity * 100;
+                const b = 180 - sunsetOpacity * 180;
+
+                const glowGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 350);
+                glowGrad.addColorStop(0, `rgba(${r}, ${g}, ${Math.max(0, b)}, ${0.8 * progress})`);
+                glowGrad.addColorStop(0.5, `rgba(${r}, ${g - 30}, ${Math.max(0, b - 50)}, ${0.4 * progress})`);
                 glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                
                 ctx.fillStyle = glowGrad;
                 ctx.beginPath();
-                ctx.arc(sunX, sunY, 250, 0, Math.PI * 2);
+                ctx.arc(sunX, sunY, 350, 0, Math.PI * 2);
                 ctx.fill();
 
-                drawSunRays(sunX, sunY, progress);
+                drawSunRays(sunX, sunY, progress, sunsetOpacity);
 
                 ctx.beginPath();
                 ctx.arc(sunX, sunY, 40, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(255, 253, 235, ${Math.min(1, progress * 1.2)})`;
-                ctx.shadowColor = 'rgba(255, 240, 150, 0.8)';
-                ctx.shadowBlur = 35;
+                ctx.fillStyle = `rgba(255, 253, ${235 - sunsetOpacity * 100}, ${Math.min(1, progress * 1.2)})`;
+                ctx.shadowColor = `rgba(${r}, ${g}, ${Math.max(0, b)}, 0.8)`;
+                ctx.shadowBlur = 40 + sunsetOpacity * 20;
                 ctx.fill();
                 ctx.shadowBlur = 0;
             }
