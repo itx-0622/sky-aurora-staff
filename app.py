@@ -1,849 +1,835 @@
 import os
 import json
-import base64
-import datetime
 import random
-from flask import Flask, request, render_template_string, redirect, session, jsonify
+import time
+from datetime import datetime
+from flask import Flask, request, redirect, session, url_for, render_template_string, jsonify
 import requests
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = os.urandom(24)
 
-# ==========================================
-# ⚙️ 설정 및 환경 변수
-# ==========================================
-CLIENT_ID = "1534184089144266872"
-CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm")
-BASE_URL = "https://sky-aurora-staff.onrender.com"
+# ---------------------------------------------------------------------------
+# Environment Variables & GitHub Sync
+# ---------------------------------------------------------------------------
+DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "") # e.g. "itx-0622/sky-aurora-data"
 
-ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
-DATA_FILE = "sky_aurora_admin_data.json"
-DEFAULT_ADMINS = ["1534184089144266872", "843621337066504225"]
+GITHUB_FILE_PATH = "sky_aurora_admin_data.json"
+GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}" if GITHUB_REPO else ""
 
-# GitHub 영구 저장 환경변수
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-GITHUB_REPO = os.environ.get("GITHUB_REPO")
-
-# --------------------------------------------------
-# 📁 데이터 불러오기 및 영구 저장 로직
-# --------------------------------------------------
-def load_data():
-    if GITHUB_TOKEN and GITHUB_REPO:
-        try:
-            url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
-            headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                content = res.json()["content"]
-                decoded_data = base64.b64decode(content).decode('utf-8')
-                data = json.loads(decoded_data)
-                for admin_id in DEFAULT_ADMINS:
-                    if admin_id not in data.get("admin_whitelist", []):
-                        data.setdefault("admin_whitelist", []).append(admin_id)
-                return data
-        except Exception as e:
-            print(f"[GitHub Sync Load Error] {e}")
-
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                for admin_id in DEFAULT_ADMINS:
-                    if admin_id not in data.get("admin_whitelist", []):
-                        data.setdefault("admin_whitelist", []).append(admin_id)
-                return data
-        except Exception:
-            pass
-
+# ---------------------------------------------------------------------------
+# Data Persistence Functions
+# ---------------------------------------------------------------------------
+def get_default_data():
     return {
-        "admin_whitelist": DEFAULT_ADMINS,
-        "user_whitelist": [],
+        "admin_whitelist": ["1534184089144266872", "843621337066504225"],
+        "user_whitelist": ["1336971557418827788"],
         "user_blacklist": [],
-        "manuals": [
-            {
-                "id": 1,
-                "category": "보안 지침",
-                "pinned": True,
-                "title": "01. 기본 보안 규칙",
-                "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템 화면 캡처 및 무단 촬영 금지\n2. 계정 타인 공유 금지\n3. 접속 IP 및 접근 기록 실시간 로깅 중"
-            }
-        ],
+        "manuals": [],
+        "drafts": {}, # { user_id: { "title": ..., "category": ..., "content": ... } }
         "logs": []
     }
 
+def load_data():
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        return get_default_data()
+    
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    try:
+        res = requests.get(GITHUB_API_URL, headers=headers, timeout=5)
+        if res.status_code == 200:
+            content = res.json().get("content", "")
+            import base64
+            decoded = base64.b64decode(content).decode('utf-8')
+            data = json.loads(decoded)
+            if "drafts" not in data:
+                data["drafts"] = {}
+            return data
+    except Exception as e:
+        print(f"[GitHub Load Error] {e}")
+    return get_default_data()
+
 def save_data(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        return False
+    
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    # Get current sha
+    sha = None
+    try:
+        get_res = requests.get(GITHUB_API_URL, headers=headers, timeout=5)
+        if get_res.status_code == 200:
+            sha = get_res.json().get("sha")
+    except Exception as e:
+        print(f"[GitHub SHA Fetch Error] {e}")
 
-    if GITHUB_TOKEN and GITHUB_REPO:
-        try:
-            url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
-            headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-            get_res = requests.get(url, headers=headers, timeout=5)
-            sha = get_res.json().get("sha") if get_res.status_code == 200 else None
-            
-            json_str = json.dumps(data, ensure_ascii=False, indent=2)
-            encoded_content = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
-            
-            payload = {
-                "message": f"Auto-sync manual data [{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
-                "content": encoded_content
-            }
-            if sha:
-                payload["sha"] = sha
-                
-            requests.put(url, headers=headers, json=payload, timeout=5)
-        except Exception as e:
-            print(f"[GitHub Sync Save Error] {e}")
+    import base64
+    json_str = json.dumps(data, ensure_ascii=False, indent=2)
+    encoded_content = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
 
-def add_log(data, category, user_name, action):
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{now}] [{category}] {user_name}: {action}"
-    if "logs" not in data:
-        data["logs"] = []
-    data["logs"].insert(0, log_entry)
+    payload = {
+        "message": f"Auto-sync admin data [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
+        "content": encoded_content
+    }
+    if sha:
+        payload["sha"] = sha
 
-# --------------------------------------------------
-# 🎨 프론트엔드 UI/UX
-# --------------------------------------------------
-MAIN_HTML_TEMPLATE = """
+    try:
+        put_res = requests.put(GITHUB_API_URL, headers=headers, json=payload, timeout=5)
+        return put_res.status_code in [200, 201]
+    except Exception as e:
+        print(f"[GitHub Save Error] {e}")
+        return False
+
+def add_log(data, message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data["logs"].insert(0, f"[{timestamp}] {message}")
+    if len(data["logs"]) > 100:
+        data["logs"] = data["logs"][:100]
+
+# ---------------------------------------------------------------------------
+# HTML Template
+# ---------------------------------------------------------------------------
+HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
-    <title>SKY AURORA STAFF MANUAL</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sky Aurora Staff System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        @font-face {
-            font-family: 'GmarketSansBold';
-            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/GmarketSansBold.woff') format('woff');
-            font-weight: normal; font-style: normal;
+        :root {
+            --bg-dark: #0b0f19;
+            --aurora-1: #00ffa3;
+            --aurora-2: #00b8ff;
+            --aurora-3: #7b2cbf;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.12);
         }
-        * {
-            box-sizing: border-box; margin: 0; padding: 0;
-            -webkit-user-select: none !important; -moz-user-select: none !important; -ms-user-select: none !important; user-select: none !important;
-            -webkit-touch-callout: none !important; -webkit-tap-highlight-color: transparent;
-        }
+
         body {
-            font-family: 'GmarketSansBold', 'Pretendard', sans-serif;
-            background: #030509; color: #ffffff; overflow: hidden; height: 100vh; width: 100vw;
-            display: flex; justify-content: center; align-items: center;
+            background-color: var(--bg-dark);
+            color: #ffffff;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
         }
 
-        #security-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000000;
-            z-index: 99999999; display: none; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px;
+        /* 오로라 배경 애니메이션 */
+        .aurora-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            background: radial-gradient(circle at 20% 20%, rgba(0, 255, 163, 0.15), transparent 40%),
+                        radial-gradient(circle at 80% 80%, rgba(0, 184, 255, 0.15), transparent 40%),
+                        radial-gradient(circle at 50% 50%, rgba(123, 44, 191, 0.15), transparent 50%);
+            filter: blur(60px);
+            animation: auroraMove 12s infinite alternate ease-in-out;
         }
-        .alert-icon { font-size: 80px; color: #ff2d55; margin-bottom: 20px; animation: pulse 1.2s infinite ease-in-out; }
-        .alert-main-text { font-size: 24px; font-weight: bold; color: #ff2d55; margin-bottom: 12px; }
-        .alert-sub-text { font-size: 14px; color: #a0aec0; font-family: 'Pretendard', sans-serif; }
-        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
+        @keyframes auroraMove {
+            0% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.2) rotate(5deg); }
+            100% { transform: scale(1) rotate(-5deg); }
+        }
+
+        /* 인트로 오버레이 */
         #intro-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: #030509; z-index: 99999; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; opacity: 1; transition: opacity 0.8s ease;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #05070d;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
         }
-        .intro-circle-container {
-            position: relative; width: 140px; height: 140px; display: flex;
-            justify-content: center; align-items: center; margin-bottom: 24px;
+
+        /* 프로필 링 애니메이션 */
+        .avatar-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
-        .intro-ring {
-            position: absolute; width: 100%; height: 100%; border-radius: 50%;
-            border: 2px solid transparent; border-top-color: #00ffaa; border-right-color: #00f2fe;
-            animation: spinRing 1s linear infinite; opacity: 0.5; transition: all 0.5s ease;
+
+        .avatar-img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            z-index: 2;
+            border: 3px solid var(--aurora-1);
+            box-shadow: 0 0 20px rgba(0,255,163,0.5);
+            animation: avatarPulse 2s infinite ease-in-out;
         }
-        .intro-ring.expand {
-            transform: scale(1.3); border-width: 4px; border-color: #00ffaa;
-            box-shadow: 0 0 25px #00ffaa, inset 0 0 15px #00ffaa; opacity: 1;
+
+        @keyframes avatarPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
         }
-        @keyframes spinRing { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        .intro-avatar {
-            width: 100px; height: 100px; border-radius: 50%; object-fit: cover;
-            opacity: 0; transform: scale(0.6); transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-            border: 2px solid #00ffaa; box-shadow: 0 0 20px rgba(0,255,170,0.5);
+
+        .ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: var(--aurora-1);
+            border-bottom-color: var(--aurora-2);
+            animation: spinRing 2s linear infinite;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
-        .intro-avatar.show { opacity: 1; transform: scale(1); }
-        .intro-progress-text { font-size: 28px; color: #00ffaa; font-family: 'GmarketSansBold'; letter-spacing: 1px; }
-        .intro-welcome-text { font-size: 18px; color: #ffffff; font-family: 'Pretendard'; font-weight: 600; margin-top: 16px; opacity: 0; transition: opacity 0.5s ease; text-align: center; padding: 0 20px; }
-        .intro-welcome-text.show { opacity: 1; }
 
-        #bg-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
-
-        .container {
-            position: relative; z-index: 2; width: 94%; max-width: 1280px; height: 90vh;
-            background: rgba(8, 12, 24, 0.85); backdrop-filter: blur(25px); border: 1px solid rgba(0, 255, 200, 0.25);
-            border-radius: 24px; box-shadow: 0 0 60px rgba(0, 255, 170, 0.12);
-            display: flex; flex-direction: column; overflow: hidden; animation: containerAppear 0.8s ease;
+        .avatar-container.expanding .ring {
+            opacity: 1;
         }
-        @keyframes containerAppear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-        header { padding: 16px 24px; background: rgba(5, 8, 18, 0.95); border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; }
-        header h1 { font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        
-        .header-controls { display: flex; align-items: center; gap: 12px; }
-        .badge-admin { background: rgba(255, 45, 85, 0.2); border: 1px solid #ff2d55; color: #ff2d55; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
-        .badge-staff { background: rgba(0, 255, 170, 0.2); border: 1px solid #00ffaa; color: #00ffaa; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
-        .avatar-img { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #00ffaa; }
-        .logout-btn { font-family: 'Pretendard', sans-serif; color: #8a99ad; text-decoration: none; font-size: 12px; padding: 5px 12px; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; }
-        .logout-btn:hover { color: #fff; border-color: #00ffaa; background: rgba(0, 255, 170, 0.1); }
+        .ring-1 { width: 120px; height: 120px; animation-duration: 2s; }
+        .ring-2 { width: 140px; height: 140px; animation-duration: 3s; animation-direction: reverse; }
+        .ring-3 { width: 160px; height: 160px; animation-duration: 1.5s; }
 
-        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; background: rgba(13, 20, 38, 0.85); border: 1px solid rgba(0, 255, 170, 0.25); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
-        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
-        .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5); }
+        @keyframes spinRing {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
-        .dashboard { display: flex; flex: 1; overflow: hidden; }
-        
-        .sidebar { width: 300px; background: rgba(0, 0, 0, 0.4); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 20px 14px; overflow-y: auto; }
-        .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1px; margin: 16px 0 8px 8px; text-transform: uppercase; font-family: 'Pretendard'; font-weight: bold; }
-        
-        .aurora-btn-wrapper { position: relative; margin-bottom: 8px; border-radius: 12px; overflow: hidden; padding: 2px; background: rgba(255, 255, 255, 0.03); transition: all 0.25s ease; }
-        .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); box-shadow: 0 0 15px rgba(0, 255, 170, 0.4); }
-        .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: rgba(10, 16, 32, 0.95); border: none; color: #8a99ad; border-radius: 10px; cursor: pointer; font-size: 13px; font-family: 'Pretendard', sans-serif; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-        .aurora-btn-wrapper.active .item-btn { color: #ffffff; background: rgba(6, 24, 38, 0.95); font-weight: bold; }
-        .pin-badge { font-size: 11px; margin-right: 4px; }
+        /* 글래스모피즘 카드 */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            margin-bottom: 24px;
+        }
 
-        .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; }
-        .content-card { background: rgba(5, 8, 17, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        
-        .doc-title { font-size: 20px; margin-bottom: 16px; color: #ffffff; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 12px; display: flex; align-items: center; gap: 10px; }
-        .doc-title::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
-        .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: #cbd5e1; white-space: pre-wrap; background: rgba(0, 0, 0, 0.3); padding: 20px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.05); }
+        /* 커스텀 자체 알림 */
+        .custom-alert {
+            position: fixed;
+            top: 20px; right: 20px;
+            z-index: 10000;
+            min-width: 300px;
+            background: rgba(15, 23, 42, 0.95);
+            border-left: 4px solid var(--aurora-1);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: none;
+            animation: slideIn 0.3s forwards;
+        }
 
-        input, textarea, select { width: 100%; background: rgba(3, 5, 9, 0.8); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.12); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; }
-        input:focus, textarea:focus { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
-        .btn-ui { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif; transition: all 0.2s ease; }
-        .btn-ui:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4); }
-        .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
-        .btn-secondary { background: linear-gradient(135deg, #475569, #334155); }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
 
-        ul.data-list { list-style: none; padding: 0; }
-        ul.data-list li { background: rgba(10, 16, 32, 0.7); padding: 12px 14px; margin-bottom: 8px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
+        /* 디코 유저 자동완성 팝업 */
+        .mention-dropdown {
+            position: absolute;
+            background: #1e293b;
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 100%;
+            z-index: 1000;
+            display: none;
+        }
 
-        .tab-enter { animation: manualEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .tab-leave { animation: manualLeave 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
-        @keyframes manualEnter { 0% { opacity: 0; transform: translateY(20px) scale(0.98); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-        @keyframes manualLeave { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-15px) scale(0.98); } }
+        .mention-item {
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
 
-        @media (max-width: 768px) {
-            .container { width: 100%; height: 100vh; border-radius: 0; border: none; }
-            .dashboard { flex-direction: column; }
-            .sidebar { width: 100%; height: 210px; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 12px; }
-            .main-content { padding: 16px; }
-            header { padding: 12px 16px; }
-            header h1 { font-size: 15px; }
-            .doc-title { font-size: 17px; }
-            .doc-body { font-size: 14px; padding: 14px; }
+        .mention-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .mention-avatar {
+            width: 32px; height: 32px; border-radius: 50%;
+        }
+
+        .btn-aurora {
+            background: linear-gradient(135deg, var(--aurora-1), var(--aurora-2));
+            color: #000;
+            font-weight: 600;
+            border: none;
+            transition: all 0.3s;
+        }
+
+        .btn-aurora:hover {
+            opacity: 0.9;
+            box-shadow: 0 0 15px rgba(0,255,163,0.4);
         }
     </style>
-    <script>
-        document.addEventListener('contextmenu', e => e.preventDefault());
-        document.addEventListener('selectstart', e => e.preventDefault());
-        document.addEventListener('dragstart', e => e.preventDefault());
-
-        function triggerSecurityLock() { const overlay = document.getElementById('security-overlay'); if (overlay) overlay.style.display = 'flex'; }
-        function releaseSecurityLock() { const overlay = document.getElementById('security-overlay'); if (overlay) overlay.style.display = 'none'; }
-
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Shift' || e.key === 'Meta' || e.key === 'Alt' || e.key === 'Control' || e.key === 'PrintScreen' || e.key === 'F12') { triggerSecurityLock(); }
-            const k = e.key.toLowerCase();
-            if ((e.ctrlKey && ['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k)) || (e.metaKey && ['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k))) { triggerSecurityLock(); }
-        }, true);
-
-        document.addEventListener('keyup', function(e) { if (!e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) { releaseSecurityLock(); } });
-        window.addEventListener('blur', triggerSecurityLock); window.addEventListener('focus', releaseSecurityLock);
-        document.addEventListener('visibilitychange', function() { if (document.hidden) triggerSecurityLock(); else releaseSecurityLock(); });
-
-        function login() {
-            // BASE_URL 기반 고정 Redirect URI 사용하여 디스코드 콜백 오류 방지
-            const redirectUri = encodeURIComponent("https://sky-aurora-staff.onrender.com/callback");
-            location.href = `https://discord.com/oauth2/authorize?client_id={{ client_id }}&response_type=code&redirect_uri=${redirectUri}&scope=identify`;
-        }
-    </script>
 </head>
 <body>
-    <div id="security-overlay">
-        <div class="alert-icon">⚠️</div>
-        <div class="alert-main-text">보안 경고: 무단 캡처 금지</div>
-        <div class="alert-sub-text">시스템 정보의 무단 촬영 및 복제 시도는 금지되어 있습니다.</div>
+
+<div class="aurora-bg"></div>
+
+<!-- 커스텀 메세지 알림 -->
+<div id="customAlert" class="custom-alert">
+    <div class="d-flex align-items-center justify-content-between">
+        <span id="alertMsg">알림 메시지</span>
+        <button type="button" class="btn-close btn-close-white ms-3" onclick="closeCustomAlert()"></button>
     </div>
+</div>
 
-    <div id="intro-overlay" style="display:none;">
-        <div class="intro-circle-container">
-            <div id="intro-ring" class="intro-ring"></div>
-            <img id="intro-avatar-img" class="intro-avatar" src="" alt="User Avatar">
-        </div>
-        <div id="intro-progress" class="intro-progress-text">0%</div>
-        <div id="intro-welcome" class="intro-welcome-text"></div>
+<!-- 인트로 오버레이 -->
+{% if user %}
+<div id="intro-overlay">
+    <div class="avatar-container mb-4" id="introAvatar">
+        <div class="ring ring-1"></div>
+        <div class="ring ring-2"></div>
+        <div class="ring ring-3"></div>
+        <img src="{{ user.avatar }}" class="avatar-img" alt="Profile">
     </div>
+    <h3 id="introStatus" class="fw-bold text-light">오로라 시스템에 접속 중...</h3>
+    <p id="welcomeMsg" class="text-info mt-2" style="display:none; font-size: 1.2rem;">
+        ✨ {{ user.username }}님 환영합니다!
+    </p>
+</div>
+{% endif %}
 
-    <canvas id="bg-canvas"></canvas>
-
-    <div class="container">
-        <header>
-            <h1>SKY AURORA STAFF SYSTEM</h1>
-            <div id="user-header-info" class="header-controls" style="display:none;">
-                <span id="user-role-badge" class="badge-staff">STAFF</span>
-                <img id="user-avatar" src="" alt="Avatar" class="avatar-img" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                <span id="user-name" style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard'; font-weight:600;"></span>
-                <a href="/logout" class="logout-btn">로그아웃</a>
-            </div>
-        </header>
-
-        <div id="login-box" class="login-box">
-            <h2 style="font-size: 18px; color: #e2e8f0; margin-bottom: 24px; font-family: 'GmarketSansBold';">🔒 스태프 시스템 인증</h2>
-            <button onclick="login()" class="discord-btn">
-                디스코드 계정으로 통합 로그인
-            </button>
+<div class="container py-4">
+    <!-- 헤더 -->
+    <div class="glass-card d-flex justify-content-between align-items-center">
+        <div>
+            <h2 class="fw-bold m-0"><i class="fa-solid fa-plane-departure text-info me-2"></i>Sky Aurora Staff</h2>
         </div>
-
-        <div id="main-dashboard" class="dashboard" style="display:none;">
-            <div class="sidebar">
-                <div id="manual-sidebar-categorized"></div>
-
-                <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
-                    <div class="sidebar-category-title" style="color:#38bdf8;">Admin Controls</div>
-                    <div class="aurora-btn-wrapper admin-nav" id="nav-m-manage">
-                        <button class="item-btn" onclick="switchAdminTab('m-manage')">📖 매뉴얼 등록/관리</button>
-                    </div>
-                    <div class="aurora-btn-wrapper admin-nav" id="nav-permissions">
-                        <button class="item-btn" onclick="switchAdminTab('permissions')">🛡️ 권한 제어 센터</button>
-                    </div>
-                    <div class="aurora-btn-wrapper admin-nav" id="nav-logs">
-                        <button class="item-btn" onclick="switchAdminTab('logs')">📜 실시간 접속 로그</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="main-content">
-                <div id="view-manual" class="tab-enter" style="display:block;">
-                    <div id="doc-title" class="doc-title">매뉴얼 선택 중...</div>
-                    <div id="doc-body" class="doc-body"></div>
-                </div>
-
-                <div id="view-admin-m-manage" class="tab-enter" style="display:none;">
-                    <div class="doc-title">매뉴얼 신규 등록 및 작성</div>
-                    <div class="content-card">
-                        <div style="display:flex; gap:10px; margin-bottom:4px;">
-                            <input type="text" id="m-edit-category" placeholder="주제(카테고리) 예: 운항 지침, 공통 매뉴얼" style="flex:2;">
-                            <label style="display:flex; align-items:center; gap:6px; font-family:'Pretendard'; font-size:13px; color:#00ffaa; cursor:pointer; padding-bottom:12px;">
-                                <input type="checkbox" id="m-edit-pinned" style="width:auto; margin:0;"> 📌 상단 고정
-                            </label>
-                        </div>
-                        <input type="text" id="m-edit-title" placeholder="매뉴얼 제목을 입력하세요">
-                        <textarea id="m-edit-content" style="height:240px;" placeholder="매뉴얼 상세 내용을 입력하세요"></textarea>
-                        <div style="display:flex; gap:10px;">
-                            <button onclick="saveManualData()" class="btn-ui" style="flex:1;">💾 매뉴얼 저장/수정</button>
-                            <button onclick="deleteManualData()" class="btn-ui btn-danger" style="width:100px;">🗑️ 삭제</button>
-                            <button onclick="resetManualForm()" class="btn-ui btn-secondary" style="width:100px;">새로작성</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="view-admin-permissions" class="tab-enter" style="display:none;">
-                    <div class="doc-title">스태프 접근 권한 관리</div>
-                    <div class="content-card" style="margin-bottom:20px;">
-                        <div style="display:flex; gap:10px;">
-                            <input type="text" id="perm-target-id" placeholder="대상 디스코드 유저 ID 입력" style="margin:0;">
-                            <button onclick="updatePermission('whitelist', 'add')" class="btn-ui">화이트리스트 추가</button>
-                            <button onclick="updatePermission('blacklist', 'add')" class="btn-ui btn-danger">블랙리스트 차단</button>
-                        </div>
-                    </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-                        <div class="content-card">
-                            <h3 style="color:#4ade80; margin-bottom:12px; font-size:15px;">화이트리스트 목록</h3>
-                            <ul id="perm-wl-list" class="data-list"></ul>
-                        </div>
-                        <div class="content-card">
-                            <h3 style="color:#f87171; margin-bottom:12px; font-size:15px;">블랙리스트 목록</h3>
-                            <ul id="perm-bl-list" class="data-list"></ul>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="view-admin-logs" class="tab-enter" style="display:none;">
-                    <div class="doc-title">실시간 활동 로그</div>
-                    <div class="content-card">
-                        <div id="admin-log-box" style="background:rgba(3, 5, 9, 0.9); padding:16px; border-radius:12px; font-family:monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(255,255,255,0.05);"></div>
-                    </div>
-                </div>
-            </div>
+        <div>
+            {% if user %}
+                <span class="me-3"><img src="{{ user.avatar }}" width="30" class="rounded-circle me-1"> <strong>{{ user.username }}</strong></span>
+                <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fa-solid fa-right-from-bracket"></i> 로그아웃</a>
+            {% else %}
+                <a href="/login" class="btn btn-aurora btn-sm"><i class="fa-brands fa-discord me-1"></i> 디스코드 로그인</a>
+            {% endif %}
         </div>
     </div>
 
-    <script>
-        const canvas = document.getElementById('bg-canvas');
-        const ctx = canvas.getContext('2d');
-        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-        window.addEventListener('resize', resize); resize();
-        const stars = Array.from({ length: 120 }, () => ({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, size: Math.random() * 2, alpha: Math.random(), speed: Math.random() * 0.012 + 0.005 }));
-        let tick = 0;
-        function drawRibbonAurora(yOffset, waveHeight, color1, color2, speedMult) {
-            ctx.save(); ctx.beginPath();
-            const startY = yOffset + Math.sin(tick * speedMult) * 20; ctx.moveTo(0, startY);
-            for (let x = 0; x <= canvas.width; x += 30) {
-                const y = yOffset + Math.sin(x * 0.0025 + tick * speedMult) * waveHeight;
-                ctx.lineTo(x, y);
-            }
-            ctx.lineTo(canvas.width, startY + 200); ctx.lineTo(0, startY + 200); ctx.closePath();
-            const grad = ctx.createLinearGradient(0, yOffset - 50, canvas.width, yOffset + 200);
-            grad.addColorStop(0, color1); grad.addColorStop(1, color2);
-            ctx.fillStyle = grad; ctx.filter = 'blur(25px)'; ctx.fill(); ctx.restore();
+    {% if user %}
+    <div class="row">
+        <!-- 매뉴얼 관리 섹션 -->
+        <div class="col-md-7">
+            <div class="glass-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="fw-bold m-0"><i class="fa-solid fa-book me-2"></i>매뉴얼 관리</h4>
+                    {% if is_admin %}
+                    <div>
+                        <button class="btn btn-sm btn-outline-warning me-2" onclick="saveDraft()"><i class="fa-solid fa-floppy-disk"></i> 임시 저장</button>
+                        <button class="btn btn-sm btn-aurora" onclick="resetForm()"><i class="fa-solid fa-plus"></i> 새로 작성</button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if is_admin %}
+                <form id="manualForm" action="/save_manual" method="POST" class="mb-4">
+                    <input type="hidden" id="manual_id" name="manual_id" value="">
+                    <div class="mb-2">
+                        <select id="select_manual" class="form-select bg-dark text-light border-secondary" onchange="loadManualToEdit(this.value)">
+                            <option value="">-- 수정할 매뉴얼 선택 (신규 작성 시 선택 해제) --</option>
+                            {% for m in data.manuals %}
+                            <option value="{{ m.id }}">{{ m.title }} [{{ m.category }}]</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-4">
+                            <input type="text" id="manual_category" name="category" class="form-control bg-dark text-light border-secondary" placeholder="카테고리" required>
+                        </div>
+                        <div class="col-md-8">
+                            <input type="text" id="manual_title" name="title" class="form-control bg-dark text-light border-secondary" placeholder="제목" required>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <textarea id="manual_content" name="content" class="form-control bg-dark text-light border-secondary" rows="4" placeholder="매뉴얼 내용을 입력하세요..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-aurora w-100">매뉴얼 저장 및 게시</button>
+                </form>
+                {% endif %}
+
+                <!-- 매뉴얼 목록 -->
+                <div class="accordion" id="manualAccordion">
+                    {% for m in data.manuals %}
+                    <div class="accordion-item bg-dark text-light border-secondary mb-2">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed bg-dark text-light" type="button" data-bs-toggle="collapse" data-bs-target="#m{{ m.id }}">
+                                <span class="badge bg-info me-2">{{ m.category }}</span> <strong>{{ m.title }}</strong>
+                            </button>
+                        </h2>
+                        <div id="m{{ m.id }}" class="accordion-collapse collapse">
+                            <div class="accordion-body">
+                                <p style="white-space: pre-wrap;">{{ m.content }}</p>
+                                {% if is_admin %}
+                                <div class="text-end">
+                                    <button class="btn btn-sm btn-outline-info" onclick="loadManualToEdit('{{ m.id }}')">수정</button>
+                                    <a href="/delete_manual/{{ m.id }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('삭제하시겠습니까?')">삭제</a>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 직원 권한 관리 섹션 (어드민전용) -->
+        <div class="col-md-5">
+            {% if is_admin %}
+            <div class="glass-card">
+                <h4 class="fw-bold mb-3"><i class="fa-solid fa-users-gear me-2"></i>직원 권한 관리</h4>
+                
+                <form action="/update_user_role" method="POST" class="mb-4">
+                    <div class="position-relative mb-2">
+                        <label class="form-label text-muted small">디스코드 ID / 멘션(@유저명)</label>
+                        <input type="text" id="discord_id_input" name="user_id" class="form-control bg-dark text-light border-secondary" placeholder="@사용자이름 또는 ID 입력" autocomplete="off" required>
+                        
+                        <!-- 멘션 자동완성 드롭다운 -->
+                        <div id="mentionDropdown" class="mention-dropdown"></div>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="grant_admin" name="grant_admin" value="true">
+                        <label class="form-check-label" for="grant_admin">어드민 권한 부여 (화이트리스트 추가 시)</label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" name="action" value="whitelist" class="btn btn-aurora flex-fill"><i class="fa-solid fa-user-check me-1"></i> 화이트리스트 등록</button>
+                        <button type="submit" name="action" value="blacklist" class="btn btn-danger flex-fill"><i class="fa-solid fa-user-slash me-1"></i> 블랙리스트 등록</button>
+                    </div>
+                </form>
+
+                <hr class="border-secondary">
+
+                <h6 class="fw-bold mt-3">관리자 (Admin)</h6>
+                <ul class="list-group list-group-flush mb-3">
+                    {% for uid in data.admin_whitelist %}
+                    <li class="list-group-bg bg-transparent text-light list-group-item d-flex justify-content-between align-items-center border-secondary px-0">
+                        <code>{{ uid }}</code>
+                        <span class="badge bg-warning text-dark">Admin</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <h6 class="fw-bold">화이트리스트 (Whitelist)</h6>
+                <ul class="list-group list-group-flush mb-3">
+                    {% for uid in data.user_whitelist %}
+                    <li class="list-group-bg bg-transparent text-light list-group-item d-flex justify-content-between align-items-center border-secondary px-0">
+                        <code>{{ uid }}</code>
+                        <a href="/remove_user/whitelist/{{ uid }}" class="btn btn-sm btn-outline-danger">제거</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+
+                <h6 class="fw-bold">블랙리스트 (Blacklist)</h6>
+                <ul class="list-group list-group-flush">
+                    {% for uid in data.user_blacklist %}
+                    <li class="list-group-bg bg-transparent text-light list-group-item d-flex justify-content-between align-items-center border-secondary px-0">
+                        <code>{{ uid }}</code>
+                        <a href="/remove_user/blacklist/{{ uid }}" class="btn btn-sm btn-outline-secondary">제거</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- 시스템 로그 섹션 -->
+            <div class="glass-card">
+                <h5 class="fw-bold mb-3"><i class="fa-solid fa-list-check me-2"></i>시스템 활동 로그</h5>
+                <div style="max-height: 250px; overflow-y: auto; font-size: 0.85rem;" class="bg-dark p-2 rounded border border-secondary">
+                    {% for log in data.logs %}
+                    <div class="text-muted border-bottom border-secondary py-1">{{ log }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="text-center py-5 glass-card">
+        <h3>스태프 관제 시스템에 접속하려면 로그인하세요.</h3>
+        <p class="text-muted">디스코드 계정 인증을 통해 권한이 부여된 사용자만 접근할 수 있습니다.</p>
+        <a href="/login" class="btn btn-aurora btn-lg mt-2"><i class="fa-brands fa-discord me-2"></i> Discord로 로그인</a>
+    </div>
+    {% endif %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const manualsData = {{ data.manuals | tojson }};
+    const currentUserId = "{{ user.id if user else '' }}";
+
+    // 1. 커스텀 자체 알림 함수
+    function showAlert(msg) {
+        const alertBox = document.getElementById('customAlert');
+        document.getElementById('alertMsg').innerText = msg;
+        alertBox.style.display = 'block';
+        setTimeout(() => { closeCustomAlert(); }, 4000);
+    }
+    function closeCustomAlert() {
+        document.getElementById('customAlert').style.display = 'none';
+    }
+
+    // 2. 인트로 로딩 및 펄스 링 애니메이션
+    {% if user %}
+    window.addEventListener('DOMContentLoaded', () => {
+        const overlay = document.getElementById('intro-overlay');
+        const avatarContainer = document.getElementById('introAvatar');
+        const statusText = document.getElementById('introStatus');
+        const welcomeMsg = document.getElementById('welcomeMsg');
+
+        // 3초 ~ 5초 랜덤 로딩
+        const randomTime = Math.floor(Math.random() * 2000) + 3000;
+
+        setTimeout(() => {
+            statusText.style.display = 'none';
+            welcomeMsg.style.display = 'block';
+            avatarContainer.classList.add('expanding'); // 링 생성 및 확장
+
+            setTimeout(() => {
+                avatarContainer.classList.remove('expanding'); // 링 제거
+                overlay.style.opacity = '0';
+                setTimeout(() => { overlay.style.visibility = 'hidden'; }, 800);
+            }, 1200);
+        }, randomTime);
+    });
+    {% endif %}
+
+    // 3. 매뉴얼 선택 수정 및 임시 저장
+    function loadManualToEdit(id) {
+        if (!id) { resetForm(); return; }
+        const item = manualsData.find(m => m.id == id);
+        if (item) {
+            document.getElementById('manual_id').value = item.id;
+            document.getElementById('manual_category').value = item.category;
+            document.getElementById('manual_title').value = item.title;
+            document.getElementById('manual_content').value = item.content;
+            document.getElementById('select_manual').value = item.id;
+            showAlert('수정할 매뉴얼을 불러왔습니다.');
         }
-        function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            stars.forEach(s => { s.alpha += s.speed; if (s.alpha > 1 || s.alpha < 0) s.speed = -s.speed; ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(s.alpha)})`; ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill(); });
-            tick += 0.015;
-            drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.3)', 'rgba(0, 150, 255, 0.03)', 0.8);
-            drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.2)', 'rgba(140, 0, 255, 0.03)', 1.1);
-            requestAnimationFrame(animate);
+    }
+
+    function resetForm() {
+        document.getElementById('manual_id').value = '';
+        document.getElementById('manual_category').value = '';
+        document.getElementById('manual_title').value = '';
+        document.getElementById('manual_content').value = '';
+        document.getElementById('select_manual').value = '';
+    }
+
+    function saveDraft() {
+        const draft = {
+            category: document.getElementById('manual_category').value,
+            title: document.getElementById('manual_title').value,
+            content: document.getElementById('manual_content').value
+        };
+        fetch('/save_draft', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(draft)
+        }).then(res => res.json()).then(data => {
+            if(data.success) showAlert('임시 저장이 완료되었습니다.');
+        });
+    }
+
+    // 4. 복사/붙여넣기 및 캡처 감지 보안 로그
+    function sendSecurityLog(actionType) {
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const deviceType = isMobile ? "Mobile" : "Desktop";
+        fetch('/log_event', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action: actionType, device: deviceType })
+        });
+    }
+
+    document.addEventListener('copy', () => sendSecurityLog('복사 (Ctrl+C) 감지'));
+    document.addEventListener('paste', () => sendSecurityLog('붙여넣기 (Ctrl+V) 감지'));
+    document.addEventListener('keydown', (e) => {
+        // Win + Shift + S 또는 PrintScreen 감지
+        if ((e.key === 'S' || e.key === 's') && e.shiftKey && (e.metaKey || e.osKey)) {
+            sendSecurityLog('화면 캡처 시도 (Win+Shift+S)');
+        } else if (e.key === 'PrintScreen') {
+            sendSecurityLog('화면 캡처 시도 (PrintScreen)');
         }
-        animate();
+    });
 
-        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], logs: [] };
-        let selectedManualIndex = 0;
-        let currentActiveTabId = 'view-manual';
-        let hasIntroRun = false;
+    // 5. @멘션 디스코드 자동완성
+    const idInput = document.getElementById('discord_id_input');
+    const dropdown = document.getElementById('mentionDropdown');
 
-        async function syncSystemState() {
-            try {
-                const res = await fetch('/api/state');
-                if (res.status === 403) { alert("권한이 거부되었거나 화이트리스트에 등록되지 않은 계정입니다."); location.reload(); return; }
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.status === 'unauthorized') return;
-
-                    appState = data;
-                    document.getElementById('login-box').style.display = 'none';
-
-                    const avatarUrl = data.user.avatar 
-                        ? `https://cdn.discordapp.com/avatars/${data.user.id}/${data.user.avatar}.png` 
-                        : 'https://cdn.discordapp.com/embed/avatars/0.png';
-
-                    if (!hasIntroRun) {
-                        hasIntroRun = true;
-                        runCustomIntro(data.user.global_name || data.user.username, data.user.username, avatarUrl, () => {
-                            showMainDashboard(data, avatarUrl);
-                        });
-                    } else {
-                        showMainDashboard(data, avatarUrl);
-                    }
-                }
-            } catch(e) { console.error("Sync error:", e); }
-        }
-
-        function runCustomIntro(nickname, username, avatarUrl, onComplete) {
-            const introOverlay = document.getElementById('intro-overlay');
-            const introProgress = document.getElementById('intro-progress');
-            const introRing = document.getElementById('intro-ring');
-            const introAvatar = document.getElementById('intro-avatar-img');
-            const introWelcome = document.getElementById('intro-welcome');
-
-            introAvatar.src = avatarUrl;
-            introOverlay.style.display = 'flex';
-
-            const totalDuration = (Math.random() * (2000 - 300) + 300);
-            const startTime = performance.now();
-
-            function updateLoading(currentTime) {
-                const elapsed = currentTime - startTime;
-                const progress = Math.min(Math.floor((elapsed / totalDuration) * 100), 100);
-                introProgress.innerText = `${progress}%`;
-
-                if (progress < 100) {
-                    requestAnimationFrame(updateLoading);
-                } else {
-                    introProgress.style.display = 'none';
-                    introRing.classList.add('expand');
-                    introAvatar.classList.add('show');
-                    introWelcome.innerText = `${nickname}(${username}) 님 환영합니다.`;
-                    introWelcome.classList.add('show');
-
-                    setTimeout(() => {
-                        introOverlay.style.opacity = '0';
-                        setTimeout(() => {
-                            introOverlay.style.display = 'none';
-                            onComplete();
-                        }, 800);
-                    }, 1200);
-                }
-            }
-            requestAnimationFrame(updateLoading);
-        }
-
-        function showMainDashboard(data, avatarUrl) {
-            document.getElementById('main-dashboard').style.display = 'flex';
-            document.getElementById('user-header-info').style.display = 'flex';
-
-            document.getElementById('user-avatar').src = avatarUrl;
-            document.getElementById('user-name').innerText = `${data.user.global_name || data.user.username}`;
-
-            const roleBadge = document.getElementById('user-role-badge');
-            if (data.role === 'admin') {
-                roleBadge.innerText = 'ADMIN';
-                roleBadge.className = 'badge-admin';
-                document.getElementById('admin-menu-section').style.display = 'block';
+    if (idInput) {
+        idInput.addEventListener('input', (e) => {
+            const val = e.target.value;
+            if (val.startsWith('@')) {
+                const query = val.substring(1);
+                fetch(`/search_discord_user?q=${encodeURIComponent(query)}`)
+                    .then(res => res.json())
+                    .then(users => {
+                        dropdown.innerHTML = '';
+                        if (users.length > 0) {
+                            dropdown.style.display = 'block';
+                            users.forEach(u => {
+                                const div = document.createElement('div');
+                                div.className = 'mention-item';
+                                div.innerHTML = `
+                                    <img src="${u.avatar}" class="mention-avatar">
+                                    <div>
+                                        <div class="fw-bold">${u.username} <small class="text-muted">(${u.global_name})</small></div>
+                                        <div class="text-muted small">ID: ${u.id}</div>
+                                    </div>
+                                `;
+                                div.onclick = () => {
+                                    idInput.value = u.id;
+                                    dropdown.style.display = 'none';
+                                };
+                                dropdown.appendChild(div);
+                            });
+                        } else {
+                            dropdown.style.display = 'none';
+                        }
+                    });
             } else {
-                roleBadge.innerText = 'STAFF';
-                roleBadge.className = 'badge-staff';
-                document.getElementById('admin-menu-section').style.display = 'none';
+                dropdown.style.display = 'none';
             }
-
-            renderCategorizedSidebar();
-            renderAdminViews();
-        }
-
-        function renderCategorizedSidebar() {
-            const container = document.getElementById('manual-sidebar-categorized');
-            container.innerHTML = '';
-
-            const sortedManuals = [...appState.manuals].map((m, originalIdx) => ({ ...m, originalIdx }));
-            sortedManuals.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-
-            const categories = {};
-            sortedManuals.forEach(item => {
-                const cat = item.category || '공통 매뉴얼';
-                if (!categories[cat]) categories[cat] = [];
-                categories[cat].push(item);
-            });
-
-            for (const [catName, items] of Object.entries(categories)) {
-                const catTitle = document.createElement('div');
-                catTitle.className = 'sidebar-category-title';
-                catTitle.innerText = `📂 ${catName}`;
-                container.appendChild(catTitle);
-
-                items.forEach(m => {
-                    const wrapper = document.createElement('div');
-                    wrapper.className = `aurora-btn-wrapper ${m.originalIdx === selectedManualIndex ? 'active' : ''}`;
-                    wrapper.innerHTML = `
-                        <button class="item-btn" onclick="selectManualItem(${m.originalIdx})">
-                            <span>${m.pinned ? '<span class="pin-badge">📌</span>' : ''}${m.title}</span>
-                        </button>
-                    `;
-                    container.appendChild(wrapper);
-                });
-            }
-
-            if (appState.manuals.length > 0) {
-                const current = appState.manuals[selectedManualIndex] || appState.manuals[0];
-                document.getElementById('doc-title').innerText = `${current.pinned ? '📌 ' : ''}${current.title}`;
-                document.getElementById('doc-body').innerText = current.content;
-            }
-        }
-
-        function selectManualItem(idx) {
-            selectedManualIndex = idx;
-            renderCategorizedSidebar();
-            transitionToTab('view-manual');
-            
-            if (appState.role === 'admin') {
-                const current = appState.manuals[idx];
-                if (current) {
-                    document.getElementById('m-edit-category').value = current.category || '';
-                    document.getElementById('m-edit-pinned').checked = !!current.pinned;
-                    document.getElementById('m-edit-title').value = current.title || '';
-                    document.getElementById('m-edit-content').value = current.content || '';
-                }
-            }
-        }
-
-        function transitionToTab(targetTabId) {
-            if (currentActiveTabId === targetTabId) return;
-
-            const currentTab = document.getElementById(currentActiveTabId);
-            const targetTab = document.getElementById(targetTabId);
-
-            if (currentTab) {
-                currentTab.classList.remove('tab-enter');
-                currentTab.classList.add('tab-leave');
-                setTimeout(() => {
-                    currentTab.style.display = 'none';
-                    currentTab.classList.remove('tab-leave');
-                    
-                    targetTab.style.display = 'block';
-                    targetTab.classList.add('tab-enter');
-                    currentActiveTabId = targetTabId;
-                }, 250);
-            } else {
-                targetTab.style.display = 'block';
-                targetTab.classList.add('tab-enter');
-                currentActiveTabId = targetTabId;
-            }
-        }
-
-        function switchAdminTab(tabName) {
-            document.querySelectorAll('.admin-nav').forEach(el => el.classList.remove('active'));
-            const navEl = document.getElementById(`nav-${tabName}`);
-            if (navEl) navEl.classList.add('active');
-            
-            transitionToTab(`view-admin-${tabName}`);
-        }
-
-        function renderAdminViews() {
-            if (appState.role !== 'admin') return;
-
-            const wlList = document.getElementById('perm-wl-list');
-            wlList.innerHTML = appState.user_whitelist.map(id => `
-                <li>
-                    <span>${id}</span>
-                    <button class="btn-ui btn-danger" style="padding:4px 8px; font-size:11px;" onclick="updatePermission('whitelist', 'remove', '${id}')">제거</button>
-                </li>
-            `).join('');
-
-            const blList = document.getElementById('perm-bl-list');
-            blList.innerHTML = appState.user_blacklist.map(id => `
-                <li>
-                    <span>${id}</span>
-                    <button class="btn-ui btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="updatePermission('blacklist', 'remove', '${id}')">해제</button>
-                </li>
-            `).join('');
-
-            const logBox = document.getElementById('admin-log-box');
-            logBox.innerHTML = appState.logs.map(log => `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(255,255,255,0.05); padding-bottom:4px;">${log}</div>`).join('');
-        }
-
-        async function saveManualData() {
-            const category = document.getElementById('m-edit-category').value.trim();
-            const pinned = document.getElementById('m-edit-pinned').checked;
-            const title = document.getElementById('m-edit-title').value.trim();
-            const content = document.getElementById('m-edit-content').value.trim();
-
-            if (!title || !content) return alert("제목과 내용을 입력해주세요.");
-
-            const res = await fetch('/api/admin/manual', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index: selectedManualIndex, category, pinned, title, content })
-            });
-
-            if (res.ok) {
-                alert("매뉴얼이 저장되었습니다.");
-                syncSystemState();
-            }
-        }
-
-        async function deleteManualData() {
-            if (!confirm("정말 이 매뉴얼을 삭제하시겠습니까?")) return;
-
-            const res = await fetch('/api/admin/manual/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index: selectedManualIndex })
-            });
-
-            if (res.ok) {
-                alert("삭제되었습니다.");
-                selectedManualIndex = 0;
-                resetManualForm();
-                syncSystemState();
-            }
-        }
-
-        function resetManualForm() {
-            selectedManualIndex = appState.manuals.length;
-            document.getElementById('m-edit-category').value = '';
-            document.getElementById('m-edit-pinned').checked = false;
-            document.getElementById('m-edit-title').value = '';
-            document.getElementById('m-edit-content').value = '';
-        }
-
-        async function updatePermission(target, action, explicitId = null) {
-            const userId = explicitId || document.getElementById('perm-target-id').value.trim();
-            if (!userId) return alert("디스코드 유저 ID를 입력해주세요.");
-
-            const res = await fetch('/api/admin/permission', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target, action, user_id: userId })
-            });
-
-            if (res.ok) {
-                if (!explicitId) document.getElementById('perm-target-id').value = '';
-                syncSystemState();
-            }
-        }
-
-        window.onload = syncSystemState;
-    </script>
+        });
+    }
+</script>
 </body>
 </html>
 """
 
-# --------------------------------------------------
-# 🛣️ Flask 라우트 정의 (버그 수정 반영 영역)
-# --------------------------------------------------
-@app.route("/")
+# ---------------------------------------------------------------------------
+# Flask Routes
+# ---------------------------------------------------------------------------
+@app.route('/')
 def index():
-    return render_template_string(MAIN_HTML_TEMPLATE, client_id=CLIENT_ID)
-
-@app.route("/callback")
-def callback():
-    code = request.args.get("code")
-    if not code:
-        return redirect("/")
-
-    # 명확한 OAuth Redirect URI 설정
-    redirect_uri = f"{BASE_URL}/callback"
+    data = load_data()
+    user = session.get('user')
+    is_admin = False
     
-    # [수정 완료] Content-Type 헤더 오타 해결 (application/x-www-form-urlencoded)
-    token_res = requests.post("https://discord.com/api/oauth2/token", data={
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": redirect_uri
-    }, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    if user:
+        user_id = str(user['id'])
+        if user_id in data.get('admin_whitelist', []):
+            is_admin = True
+            
+    return render_template_string(HTML_TEMPLATE, data=data, user=user, is_admin=is_admin)
 
-    # 토큰 검증 실패 시 콘솔 출력 후 리다이렉트
-    if token_res.status_code != 200:
-        print(f"[Discord OAuth Token Error] Status: {token_res.status_code}, Details: {token_res.text}")
-        return redirect("/")
+@app.route('/login')
+def login():
+    # Discord OAuth2 Redirect
+    redirect_uri = url_for('callback', _external=True)
+    client_id = "1346387062407696414"
+    discord_url = f"https://discord.com/oauth2/authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope=identify"
+    return redirect(discord_url)
 
-    access_token = token_res.json().get("access_token")
-    user_res = requests.get("https://discord.com/api/users/@me", headers={
-        "Authorization": f"Bearer {access_token}"
-    })
+@app.route('/callback')
+def callback():
+    code = request.args.get('code')
+    if not code:
+        return redirect('/')
+    
+    redirect_uri = url_for('callback', _external=True)
+    data = {
+        'client_id': '1346387062407696414',
+        'client_secret': DISCORD_CLIENT_SECRET,
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': redirect_uri
+    }
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    r = requests.post('https://discord.com/api/v10/oauth2/token', data=data, headers=headers)
+    token_json = r.json()
+    
+    access_token = token_json.get('access_token')
+    if not access_token:
+        return redirect('/')
 
-    if user_res.status_code == 200:
-        session["user"] = user_res.json()
-        
-        data = load_data()
-        user_id = str(session["user"]["id"])
-        user_name = session["user"].get("global_name") or session["user"].get("username")
-        
-        add_log(data, "인증", user_name, f"시스템에 성공적으로 로그인함 (ID: {user_id})")
-        save_data(data)
-
-    return redirect("/")
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/")
-
-@app.route("/api/state")
-def get_state():
-    user = session.get("user")
-    if not user:
-        return jsonify({"status": "unauthorized"}), 200
-
-    data = load_data()
-    user_id = str(user.get("id"))
-
-    if user_id in data.get("user_blacklist", []):
-        session.clear()
-        return jsonify({"error": "blacklisted"}), 403
-
-    role = "guest"
-    if user_id in data.get("admin_whitelist", DEFAULT_ADMINS):
-        role = "admin"
-    elif user_id in data.get("user_whitelist", []):
-        role = "staff"
-    else:
-        # 등록되지 않은 이용자의 권한 거부 처리
-        session.clear()
-        return jsonify({"error": "not_authorized"}), 403
-
-    return jsonify({
-        "user": user,
-        "role": role,
-        "manuals": data.get("manuals", []),
-        "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
-        "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
-        "logs": data.get("logs", []) if role == "admin" else []
-    })
-
-@app.route("/api/admin/manual", methods=["POST"])
-def admin_manual():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
-
-    req_data = request.json or {}
-    idx = req_data.get("index")
-    category = req_data.get("category", "공통 매뉴얼")
-    pinned = req_data.get("pinned", False)
-    title = req_data.get("title")
-    content = req_data.get("content")
-
-    user_name = user.get("global_name") or user.get("username")
-    manual_item = {
-        "id": int(datetime.datetime.now().timestamp()),
-        "category": category,
-        "pinned": pinned,
-        "title": title,
-        "content": content
+    # Fetch User Profile
+    user_res = requests.get('https://discord.com/api/v10/users/@me', headers={'Authorization': f'Bearer {access_token}'}).json()
+    
+    avatar_id = user_res.get('avatar')
+    user_id = user_res.get('id')
+    avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_id}.png" if avatar_id else "https://cdn.discordapp.com/embed/avatars/0.png"
+    
+    session['user'] = {
+        'id': user_id,
+        'username': user_res.get('username'),
+        'avatar': avatar_url
     }
 
-    if idx is not None and 0 <= idx < len(data["manuals"]):
-        data["manuals"][idx] = manual_item
-        add_log(data, "매뉴얼 수정", user_name, f"매뉴얼 '{title}' 수정 완료")
-    else:
-        data["manuals"].append(manual_item)
-        add_log(data, "매뉴얼 등록", user_name, f"새 매뉴얼 '{title}' 등록 완료")
+    # Logging Device & Login
+    data_store = load_data()
+    user_agent = request.headers.get('User-Agent', '')
+    is_mobile = any(device in user_agent for device in ['iPhone', 'iPad', 'Android', 'Mobile'])
+    device_str = "Mobile" if is_mobile else "Desktop"
+    
+    add_log(data_store, f"[인증] {user_res.get('username')}: 접속 성공 (ID: {user_id}, 기기: {device_str})")
+    save_data(data_store)
 
-    save_data(data)
-    return jsonify({"status": "success"})
+    return redirect('/')
 
-@app.route("/api/admin/manual/delete", methods=["POST"])
-def admin_manual_delete():
-    user = session.get("user")
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect('/')
+
+@app.route('/save_manual', methods=['POST'])
+def save_manual():
+    user = session.get('user')
+    data_store = load_data()
+    if not user or str(user['id']) not in data_store.get('admin_whitelist', []):
+        return redirect('/')
+
+    manual_id = request.form.get('manual_id')
+    category = request.form.get('category')
+    title = request.form.get('title')
+    content = request.form.get('content')
+
+    if manual_id: # 수정
+        for m in data_store['manuals']:
+            if str(m['id']) == str(manual_id):
+                m['category'] = category
+                m['title'] = title
+                m['content'] = content
+                break
+        add_log(data_store, f"[매뉴얼 수정] {user['username']}: '{title}' 수정됨")
+    else: # 신규 추가
+        new_item = {
+            "id": int(time.time()),
+            "category": category,
+            "title": title,
+            "content": content
+        }
+        data_store['manuals'].insert(0, new_item)
+        add_log(data_store, f"[매뉴얼 추가] {user['username']}: '{title}' 등록됨")
+
+    save_data(data_store)
+    return redirect('/')
+
+@app.route('/delete_manual/<int:m_id>')
+def delete_manual(m_id):
+    user = session.get('user')
+    data_store = load_data()
+    if not user or str(user['id']) not in data_store.get('admin_whitelist', []):
+        return redirect('/')
+
+    data_store['manuals'] = [m for m in data_store['manuals'] if m['id'] != m_id]
+    add_log(data_store, f"[매뉴얼 삭제] {user['username']}: ID {m_id} 매뉴얼 삭제됨")
+    save_data(data_store)
+    return redirect('/')
+
+@app.route('/save_draft', methods=['POST'])
+def save_draft():
+    user = session.get('user')
     if not user:
-        return jsonify({"error": "unauthorized"}), 401
+        return jsonify({"success": False})
+    
+    req_data = request.json
+    data_store = load_data()
+    data_store['drafts'][str(user['id'])] = req_data
+    save_data(data_store)
+    return jsonify({"success": True})
 
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
+@app.route('/update_user_role', methods=['POST'])
+def update_user_role():
+    user = session.get('user')
+    data_store = load_data()
+    if not user or str(user['id']) not in data_store.get('admin_whitelist', []):
+        return redirect('/')
 
-    idx = request.json.get("index")
-    if idx is not None and 0 <= idx < len(data["manuals"]):
-        deleted = data["manuals"].pop(idx)
-        user_name = user.get("global_name") or user.get("username")
-        add_log(data, "매뉴얼 삭제", user_name, f"매뉴얼 '{deleted.get('title')}' 삭제 완료")
-        save_data(data)
+    target_id = request.form.get('user_id', '').strip()
+    action = request.form.get('action')
+    grant_admin = request.form.get('grant_admin') == 'true'
 
-    return jsonify({"status": "success"})
+    if not target_id:
+        return redirect('/')
 
-@app.route("/api/admin/permission", methods=["POST"])
-def admin_permission():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
+    if action == 'whitelist':
+        # 블랙리스트에 있으면 제거
+        if target_id in data_store['user_blacklist']:
+            data_store['user_blacklist'].remove(target_id)
+        
+        if target_id not in data_store['user_whitelist']:
+            data_store['user_whitelist'].append(target_id)
+            
+        if grant_admin and target_id not in data_store['admin_whitelist']:
+            data_store['admin_whitelist'].append(target_id)
+            add_log(data_store, f"[권한 변경] {user['username']}: ID {target_id} -> 관리자(Admin) 및 화이트리스트 등록")
+        else:
+            add_log(data_store, f"[권한 변경] {user['username']}: ID {target_id} -> 화이트리스트 등록")
 
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
+    elif action == 'blacklist':
+        # 화이트리스트 및 어드민에서 자동 제거
+        if target_id in data_store['user_whitelist']:
+            data_store['user_whitelist'].remove(target_id)
+        if target_id in data_store['admin_whitelist']:
+            data_store['admin_whitelist'].remove(target_id)
+        
+        if target_id not in data_store['user_blacklist']:
+            data_store['user_blacklist'].append(target_id)
+            
+        add_log(data_store, f"[권한 변경] {user['username']}: ID {target_id} -> 블랙리스트 등록 (화이트/어드민 자동 제거)")
 
-    target = request.json.get("target")
-    action = request.json.get("action")
-    target_id = str(request.json.get("user_id"))
+    save_data(data_store)
+    return redirect('/')
 
-    key = "user_whitelist" if target == "whitelist" else "user_blacklist"
-    if key not in data:
-        data[key] = []
+@app.route('/remove_user/<role_type>/<uid>')
+def remove_user(role_type, uid):
+    user = session.get('user')
+    data_store = load_data()
+    if not user or str(user['id']) not in data_store.get('admin_whitelist', []):
+        return redirect('/')
 
-    user_name = user.get("global_name") or user.get("username")
+    if role_type == 'whitelist' and uid in data_store['user_whitelist']:
+        data_store['user_whitelist'].remove(uid)
+    elif role_type == 'blacklist' and uid in data_store['user_blacklist']:
+        data_store['user_blacklist'].remove(uid)
 
-    if action == "add":
-        if target_id not in data[key]:
-            data[key].append(target_id)
-            add_log(data, "권한 변경", user_name, f"ID {target_id} -> {target} 추가")
-    elif action == "remove":
-        if target_id in data[key]:
-            data[key].remove(target_id)
-            add_log(data, "권한 변경", user_name, f"ID {target_id} -> {target} 제거")
+    add_log(data_store, f"[권한 제거] {user['username']}: ID {uid} ({role_type}) 제거됨")
+    save_data(data_store)
+    return redirect('/')
 
-    save_data(data)
-    return jsonify({"status": "success"})
+@app.route('/log_event', methods=['POST'])
+def log_event():
+    user = session.get('user')
+    data = request.json
+    data_store = load_data()
+    username = user['username'] if user else "비로그인 유저"
+    add_log(data_store, f"[보안 로그] {username}: {data.get('action')} (기기: {data.get('device')})")
+    save_data(data_store)
+    return jsonify({"status": "ok"})
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+@app.route('/search_discord_user')
+def search_discord_user():
+    # 검색어 쿼리 mock 또는 백엔드 예시 처리
+    query = request.args.get('q', '')
+    # 유저 시뮬레이션 데이터반환
+    results = [
+        {"id": "1336971557418827788", "username": query or "user_sample", "global_name": "스태프 사용자", "avatar": "https://cdn.discordapp.com/embed/avatars/0.png"}
+    ]
+    return jsonify(results)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
