@@ -3,7 +3,6 @@ import json
 import base64
 import datetime
 import random
-import time
 from flask import Flask, request, render_template_string, redirect, session, jsonify
 import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -17,7 +16,7 @@ app.secret_key = os.urandom(24)
 # ==========================================
 CLIENT_ID = "1534184089144266872"
 CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm")
-BASE_URL = os.environ.get("BASE_URL", "https://sky-aurora-staff.onrender.com")
+BASE_URL = "https://sky-aurora-staff.onrender.com"
 
 ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
 DATA_FILE = "sky_aurora_admin_data.json"
@@ -29,16 +28,7 @@ GITHUB_REPO = os.environ.get("GITHUB_REPO")
 # --------------------------------------------------
 # 📁 데이터 불러오기 및 영구 저장 로직
 # --------------------------------------------------
-def ensure_manual_ids(data):
-    """모든 매뉴얼 항목이 고유 id를 가지도록 보장"""
-    manuals = data.get("manuals", [])
-    for idx, item in enumerate(manuals):
-        if "id" not in item or not item["id"]:
-            item["id"] = int(time.time() * 1000) + idx
-    return data
-
 def load_data():
-    data = None
     if GITHUB_TOKEN and GITHUB_REPO:
         try:
             url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
@@ -48,51 +38,45 @@ def load_data():
                 content = res.json()["content"]
                 decoded_data = base64.b64decode(content).decode('utf-8')
                 data = json.loads(decoded_data)
+                for admin_id in DEFAULT_ADMINS:
+                    if admin_id not in data.get("admin_whitelist", []):
+                        data.setdefault("admin_whitelist", []).append(admin_id)
+                return data
         except Exception as e:
             print(f"[GitHub Sync Load Error] {e}")
 
-    if not data and os.path.exists(DATA_FILE):
+    if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+                for admin_id in DEFAULT_ADMINS:
+                    if admin_id not in data.get("admin_whitelist", []):
+                        data.setdefault("admin_whitelist", []).append(admin_id)
+                return data
         except Exception:
             pass
 
-    if not data:
-        data = {
-            "admin_whitelist": DEFAULT_ADMINS,
-            "user_whitelist": [],
-            "user_blacklist": [],
-            "user_profiles": {},
-            "manuals": [
-                {
-                    "id": 1,
-                    "category": "보안 지침",
-                    "pinned": True,
-                    "title": "01. 기본 보안 규칙",
-                    "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템 화면 캡처 및 무단 촬영 금지\n2. 계정 타인 공유 금지\n3. 접속 IP 및 접근 기록 실시간 로깅 중"
-                }
-            ],
-            "logs": []
-        }
-
-    for admin_id in DEFAULT_ADMINS:
-        if admin_id not in data.setdefault("admin_whitelist", []):
-            data["admin_whitelist"].append(admin_id)
-
-    return ensure_manual_ids(data)
+    return {
+        "admin_whitelist": DEFAULT_ADMINS,
+        "user_whitelist": [],
+        "user_blacklist": [],
+        "user_profiles": {},
+        "manuals": [
+            {
+                "id": 1,
+                "category": "보안 지침",
+                "pinned": True,
+                "title": "01. 기본 보안 규칙",
+                "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템 화면 캡처 및 무단 촬영 금지\n2. 계정 타인 공유 금지\n3. 접속 IP 및 접근 기록 실시간 로깅 중"
+            }
+        ],
+        "logs": []
+    }
 
 def save_data(data):
-    data = ensure_manual_ids(data)
-    
-    # 1. 로컬 저장
-    try:
-        with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"[Local Save Error] {e}")
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-    # 2. GitHub 동기화 저장
     if GITHUB_TOKEN and GITHUB_REPO:
         try:
             url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
@@ -122,7 +106,7 @@ def add_log(data, category, user_name, action, device_type="PC"):
     data["logs"].insert(0, log_entry)
 
 # --------------------------------------------------
-# 🎨 프론트엔드 UI/UX
+# 🎨 프론트엔드 UI/UX (낮/밤 모드 & 동적 오로라/태양 반영)
 # --------------------------------------------------
 MAIN_HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -143,10 +127,38 @@ MAIN_HTML_TEMPLATE = """
             -webkit-user-select: none !important; -moz-user-select: none !important; -ms-user-select: none !important; user-select: none !important;
             -webkit-touch-callout: none !important; -webkit-tap-highlight-color: transparent;
         }
+        
+        /* 테마별 테마 변수 설정 */
+        :root {
+            --bg-body: #030509;
+            --container-bg: rgba(8, 12, 24, 0.85);
+            --container-border: rgba(0, 255, 200, 0.25);
+            --text-main: #ffffff;
+            --text-sub: #cbd5e1;
+            --header-bg: rgba(5, 8, 18, 0.95);
+            --sidebar-bg: rgba(0, 0, 0, 0.4);
+            --card-bg: rgba(5, 8, 17, 0.7);
+            --input-bg: rgba(3, 5, 9, 0.8);
+            --btn-item-bg: rgba(10, 16, 32, 0.95);
+        }
+
+        body.day-theme {
+            --bg-body: #e0f2fe;
+            --container-bg: rgba(255, 255, 255, 0.85);
+            --container-border: rgba(56, 189, 248, 0.4);
+            --text-main: #0f172a;
+            --text-sub: #334155;
+            --header-bg: rgba(241, 245, 249, 0.95);
+            --sidebar-bg: rgba(255, 255, 255, 0.5);
+            --card-bg: rgba(255, 255, 255, 0.75);
+            --input-bg: rgba(255, 255, 255, 0.9);
+            --btn-item-bg: rgba(241, 245, 249, 0.95);
+        }
+
         body {
             font-family: 'GmarketSansBold', 'Pretendard', sans-serif;
-            background: #030509; color: #ffffff; overflow: hidden; height: 100vh; width: 100vw;
-            display: flex; justify-content: center; align-items: center;
+            background: var(--bg-body); color: var(--text-main); overflow: hidden; height: 100vh; width: 100vw;
+            display: flex; justify-content: center; align-items: center; transition: background 0.5s ease, color 0.5s ease;
         }
 
         #security-overlay {
@@ -161,7 +173,7 @@ MAIN_HTML_TEMPLATE = """
         #custom-notification {
             position: fixed; top: 25px; right: 25px; z-index: 999999; display: flex; align-items: center; gap: 12px;
             padding: 14px 22px; background: rgba(8, 15, 30, 0.95); border: 1px solid #00ffaa;
-            border-radius: 14px; box-shadow: 0 0 20px rgba(0, 255, 170, 0.4);
+            border-radius: 14px; box-shadow: 0 0 20px rgba(0, 255, 170, 0.4); color: #fff;
             transform: translateX(150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             font-family: 'Pretendard', sans-serif; font-size: 14px; font-weight: 600;
         }
@@ -198,45 +210,56 @@ MAIN_HTML_TEMPLATE = """
 
         .container {
             position: relative; z-index: 2; width: 94%; max-width: 1280px; height: 90vh;
-            background: rgba(8, 12, 24, 0.85); backdrop-filter: blur(25px); border: 1px solid rgba(0, 255, 200, 0.25);
+            background: var(--container-bg); backdrop-filter: blur(25px); border: 1px solid var(--container-border);
             border-radius: 24px; box-shadow: 0 0 60px rgba(0, 255, 170, 0.12);
             display: flex; flex-direction: column; overflow: hidden; animation: containerAppear 0.8s ease;
+            transition: background 0.5s ease, border-color 0.5s ease;
         }
         @keyframes containerAppear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-        header { padding: 16px 24px; background: rgba(5, 8, 18, 0.95); border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; }
+        header { padding: 16px 24px; background: var(--header-bg); border-bottom: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; transition: background 0.5s ease; }
         header h1 { font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         
         .header-controls { display: flex; align-items: center; gap: 12px; }
+        .theme-toggle-btn {
+            background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3);
+            color: var(--text-main); font-family: 'Pretendard'; font-size: 12px; font-weight: bold;
+            padding: 6px 14px; border-radius: 20px; cursor: pointer; transition: all 0.3s;
+            display: flex; align-items: center; gap: 6px; backdrop-filter: blur(5px);
+        }
+        body.day-theme .theme-toggle-btn { background: rgba(0, 0, 0, 0.08); border-color: rgba(0, 0, 0, 0.2); }
+        .theme-toggle-btn:hover { transform: scale(1.05); }
+
         .badge-admin { background: rgba(255, 45, 85, 0.2); border: 1px solid #ff2d55; color: #ff2d55; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
         .badge-staff { background: rgba(0, 255, 170, 0.2); border: 1px solid #00ffaa; color: #00ffaa; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
         .avatar-img { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #00ffaa; }
-        .logout-btn { font-family: 'Pretendard', sans-serif; color: #8a99ad; text-decoration: none; font-size: 12px; padding: 5px 12px; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; }
-        .logout-btn:hover { color: #fff; border-color: #00ffaa; background: rgba(0, 255, 170, 0.1); }
+        .logout-btn { font-family: 'Pretendard', sans-serif; color: var(--text-sub); text-decoration: none; font-size: 12px; padding: 5px 12px; border: 1px solid rgba(125,125,125,0.3); border-radius: 8px; }
+        .logout-btn:hover { color: var(--text-main); border-color: #00ffaa; background: rgba(0, 255, 170, 0.1); }
 
-        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; background: rgba(13, 20, 38, 0.85); border: 1px solid rgba(0, 255, 170, 0.25); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
+        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; background: var(--card-bg); border: 1px solid var(--container-border); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); }
         .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
         .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5); }
 
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         
-        .sidebar { width: 300px; background: rgba(0, 0, 0, 0.4); border-right: 1px solid rgba(255, 255, 255, 0.08); padding: 20px 14px; overflow-y: auto; }
+        .sidebar { width: 300px; background: var(--sidebar-bg); border-right: 1px solid rgba(125, 125, 125, 0.2); padding: 20px 14px; overflow-y: auto; transition: background 0.5s ease; }
         .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1px; margin: 16px 0 8px 8px; text-transform: uppercase; font-family: 'Pretendard'; font-weight: bold; }
+        body.day-theme .sidebar-category-title { color: #0284c7; }
         
-        .aurora-btn-wrapper { position: relative; margin-bottom: 8px; border-radius: 12px; overflow: hidden; padding: 2px; background: rgba(255, 255, 255, 0.03); transition: all 0.25s ease; }
+        .aurora-btn-wrapper { position: relative; margin-bottom: 8px; border-radius: 12px; overflow: hidden; padding: 2px; background: rgba(125, 125, 125, 0.05); transition: all 0.25s ease; }
         .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); box-shadow: 0 0 15px rgba(0, 255, 170, 0.4); }
-        .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: rgba(10, 16, 32, 0.95); border: none; color: #8a99ad; border-radius: 10px; cursor: pointer; font-size: 13px; font-family: 'Pretendard', sans-serif; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-        .aurora-btn-wrapper.active .item-btn { color: #ffffff; background: rgba(6, 24, 38, 0.95); font-weight: bold; }
+        .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: var(--btn-item-bg); border: none; color: var(--text-sub); border-radius: 10px; cursor: pointer; font-size: 13px; font-family: 'Pretendard', sans-serif; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .aurora-btn-wrapper.active .item-btn { color: var(--text-main); font-weight: bold; }
         .pin-badge { font-size: 11px; margin-right: 4px; }
 
         .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; scroll-behavior: smooth; }
-        .content-card { background: rgba(5, 8, 17, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; margin-bottom: 20px; }
+        .content-card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid rgba(125, 125, 125, 0.15); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: relative; margin-bottom: 20px; transition: background 0.5s ease; }
         
-        .doc-title { font-size: 20px; margin-bottom: 16px; color: #ffffff; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        .doc-title { font-size: 20px; margin-bottom: 16px; color: var(--text-main); border-bottom: 1px solid rgba(125, 125, 125, 0.2); padding-bottom: 12px; display: flex; align-items: center; gap: 10px; }
         .doc-title::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
-        .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: #cbd5e1; white-space: pre-wrap; background: rgba(0, 0, 0, 0.3); padding: 20px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.05); }
+        .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); white-space: pre-wrap; background: rgba(0, 0, 0, 0.15); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
 
-        input, textarea, select { width: 100%; background: rgba(3, 5, 9, 0.8); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.12); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; }
+        input, textarea, select { width: 100%; background: var(--input-bg); color: var(--text-main); border: 1px solid rgba(125, 125, 125, 0.3); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; }
         input:focus, textarea:focus, select:focus { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
 
         .btn-ui {
@@ -256,20 +279,21 @@ MAIN_HTML_TEMPLATE = """
         .btn-secondary { background: linear-gradient(135deg, #475569, #334155); }
 
         ul.data-list { list-style: none; padding: 0; }
-        ul.data-list li { background: rgba(10, 16, 32, 0.7); padding: 14px; margin-bottom: 10px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
+        ul.data-list li { background: var(--btn-item-bg); padding: 14px; margin-bottom: 10px; border-radius: 12px; border: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
 
         .user-card-info { display: flex; align-items: center; gap: 12px; }
         .user-card-avatar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #00ffaa; object-fit: cover; }
         .user-card-names { display: flex; flex-direction: column; }
-        .user-card-nick { font-weight: bold; color: #ffffff; font-size: 14px; }
+        .user-card-nick { font-weight: bold; color: var(--text-main); font-size: 14px; }
         .user-card-sub { font-size: 12px; color: #00ffaa; display: flex; align-items: center; gap: 6px; }
-        .eye-btn { cursor: pointer; background: transparent; border: none; color: #8a99ad; font-size: 13px; margin-left: 4px; }
+        body.day-theme .user-card-sub { color: #0284c7; }
+        .eye-btn { cursor: pointer; background: transparent; border: none; color: var(--text-sub); font-size: 13px; margin-left: 4px; }
         .eye-btn:hover { color: #00ffaa; }
 
         .mention-dropdown {
             position: absolute; top: 45px; left: 0; right: 0; z-index: 1000;
-            background: rgba(15, 23, 42, 0.98); border: 1px solid #00ffaa; border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8); display: none; max-height: 180px; overflow-y: auto;
+            background: var(--card-bg); border: 1px solid #00ffaa; border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); display: none; max-height: 180px; overflow-y: auto;
         }
         .mention-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; transition: background 0.2s; }
         .mention-item:hover { background: rgba(0, 255, 170, 0.15); }
@@ -282,7 +306,7 @@ MAIN_HTML_TEMPLATE = """
         @media (max-width: 768px) {
             .container { width: 100%; height: 100vh; border-radius: 0; border: none; }
             .dashboard { flex-direction: column; }
-            .sidebar { width: 100%; height: 210px; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 12px; }
+            .sidebar { width: 100%; height: 210px; border-right: none; border-bottom: 1px solid rgba(125,125,125,0.2); padding: 12px; }
             .main-content { padding: 16px; }
             header { padding: 12px 16px; }
             header h1 { font-size: 15px; }
@@ -370,16 +394,21 @@ MAIN_HTML_TEMPLATE = """
     <div class="container">
         <header>
             <h1>SKY AURORA STAFF SYSTEM</h1>
-            <div id="user-header-info" class="header-controls" style="display:none;">
-                <span id="user-role-badge" class="badge-staff">STAFF</span>
-                <img id="user-avatar" src="" alt="Avatar" class="avatar-img" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                <span id="user-name" style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard'; font-weight:600;"></span>
-                <a href="/logout" class="logout-btn">로그아웃</a>
+            <div class="header-controls">
+                <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleThemeMode()">
+                    <span id="themeBtnIcon">☀️</span> <span id="themeBtnText">데이 모드</span>
+                </button>
+                <div id="user-header-info" style="display:none; align-items:center; gap:12px;">
+                    <span id="user-role-badge" class="badge-staff">STAFF</span>
+                    <img id="user-avatar" src="" alt="Avatar" class="avatar-img" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                    <span id="user-name" style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard'; font-weight:600;"></span>
+                    <a href="/logout" class="logout-btn">로그아웃</a>
+                </div>
             </div>
         </header>
 
         <div id="login-box" class="login-box">
-            <h2 style="font-size: 18px; color: #e2e8f0; margin-bottom: 24px; font-family: 'GmarketSansBold';">🔒 스태프 시스템 인증</h2>
+            <h2 style="font-size: 18px; margin-bottom: 24px; font-family: 'GmarketSansBold';">🔒 스태프 시스템 인증</h2>
             <button onclick="login()" class="discord-btn">
                 디스코드 계정으로 통합 로그인
             </button>
@@ -389,7 +418,7 @@ MAIN_HTML_TEMPLATE = """
             <div class="sidebar">
                 <div id="manual-sidebar-categorized"></div>
 
-                <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
+                <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(125,125,125,0.2); padding-top:10px;">
                     <div class="sidebar-category-title" style="color:#38bdf8;">Admin Controls</div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-m-manage">
                         <button class="item-btn" onclick="switchAdminTab('m-manage')">📖 매뉴얼 등록/관리</button>
@@ -487,7 +516,7 @@ MAIN_HTML_TEMPLATE = """
                         <div class="content-card">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                                 <h3 style="color:#4ade80; font-size:15px;">화이트리스트 목록</h3>
-                                <label style="font-size:12px; font-family:'Pretendard'; color:#8a99ad; cursor:pointer;">
+                                <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); cursor:pointer;">
                                     <input type="checkbox" onclick="toggleSelectAll('wl-check', this.checked)" style="width:auto;"> 전체 선택
                                 </label>
                             </div>
@@ -496,7 +525,7 @@ MAIN_HTML_TEMPLATE = """
                         <div class="content-card">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                                 <h3 style="color:#f87171; font-size:15px;">블랙리스트 목록</h3>
-                                <label style="font-size:12px; font-family:'Pretendard'; color:#8a99ad; cursor:pointer;">
+                                <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); cursor:pointer;">
                                     <input type="checkbox" onclick="toggleSelectAll('bl-check', this.checked)" style="width:auto;"> 전체 선택
                                 </label>
                             </div>
@@ -508,7 +537,7 @@ MAIN_HTML_TEMPLATE = """
                 <div id="view-admin-logs" class="tab-enter" style="display:none;">
                     <div class="doc-title">실시간 활동 로그</div>
                     <div class="content-card">
-                        <div id="admin-log-box" style="background:rgba(3, 5, 9, 0.9); padding:16px; border-radius:12px; font-family:monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(255,255,255,0.05);"></div>
+                        <div id="admin-log-box" style="background:var(--input-bg); padding:16px; border-radius:12px; font-family:monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(125,125,125,0.2);"></div>
                     </div>
                 </div>
             </div>
@@ -516,15 +545,104 @@ MAIN_HTML_TEMPLATE = """
     </div>
 
     <script>
+        // --------------------------------------------------
+        // ☀️/🌙 낮 모드 - 밤 모드 및 Canvas 동적 배경 로직
+        // --------------------------------------------------
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
+
         function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
         window.addEventListener('resize', resize); resize();
-        const stars = Array.from({ length: 120 }, () => ({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, size: Math.random() * 2, alpha: Math.random(), speed: Math.random() * 0.012 + 0.005 }));
+
+        // 사용자 저장 테마 불러오기 (기본값: night)
+        let currentMode = localStorage.getItem('sky_theme_mode') || 'night';
+        let progress = currentMode === 'day' ? 1.0 : 0.0; // 0: Night, 1: Day
+        let targetProgress = progress;
+
+        // 초기 테마 UI 설정
+        applyThemeUI(currentMode);
+
+        function toggleThemeMode() {
+            if (targetProgress === 0) {
+                targetProgress = 1.0;
+                currentMode = 'day';
+            } else {
+                targetProgress = 0.0;
+                currentMode = 'night';
+            }
+            localStorage.setItem('sky_theme_mode', currentMode);
+            applyThemeUI(currentMode);
+        }
+
+        function applyThemeUI(mode) {
+            const btnIcon = document.getElementById('themeBtnIcon');
+            const btnText = document.getElementById('themeBtnText');
+            if (mode === 'day') {
+                document.body.classList.add('day-theme');
+                btnIcon.innerText = '🌙';
+                btnText.innerText = '밤 모드';
+            } else {
+                document.body.classList.remove('day-theme');
+                btnIcon.innerText = '☀️';
+                btnText.innerText = '데이 모드';
+            }
+        }
+
+        // 색상 보간 함수
+        function hexToRgb(hex) {
+            const bigint = parseInt(hex.replace('#', ''), 16);
+            return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+        }
+
+        function interpolateColor(hex1, hex2, t) {
+            const c1 = hexToRgb(hex1);
+            const c2 = hexToRgb(hex2);
+            const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
+            const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
+            const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
+        const stars = Array.from({ length: 120 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 2,
+            alpha: Math.random(),
+            speed: Math.random() * 0.012 + 0.005
+        }));
+
         let tick = 0;
-        function drawRibbonAurora(yOffset, waveHeight, color1, color2, speedMult) {
-            ctx.save(); ctx.beginPath();
-            const startY = yOffset + Math.sin(tick * speedMult) * 20; ctx.moveTo(0, startY);
+
+        function drawSunRays(sunX, sunY, opacity) {
+            if (opacity <= 0) return;
+            ctx.save();
+            ctx.translate(sunX, sunY);
+            const rayCount = 12;
+            const rayLength = Math.max(canvas.width, canvas.height) * 0.8;
+            
+            for (let i = 0; i < rayCount; i++) {
+                const angle = (i * Math.PI * 2) / rayCount + tick * 0.05;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, rayLength, angle - 0.08, angle + 0.08);
+                ctx.closePath();
+                
+                const rayGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, rayLength);
+                rayGrad.addColorStop(0, `rgba(255, 253, 224, ${0.3 * opacity})`);
+                rayGrad.addColorStop(1, `rgba(255, 255, 255, 0)`);
+                ctx.fillStyle = rayGrad;
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        function drawRibbonAurora(yOffset, waveHeight, color1, color2, speedMult, opacity) {
+            if (opacity <= 0) return;
+            ctx.save();
+            ctx.globalAlpha = opacity;
+            ctx.beginPath();
+            const startY = yOffset + Math.sin(tick * speedMult) * 20;
+            ctx.moveTo(0, startY);
             for (let x = 0; x <= canvas.width; x += 30) {
                 const y = yOffset + Math.sin(x * 0.0025 + tick * speedMult) * waveHeight;
                 ctx.lineTo(x, y);
@@ -534,18 +652,78 @@ MAIN_HTML_TEMPLATE = """
             grad.addColorStop(0, color1); grad.addColorStop(1, color2);
             ctx.fillStyle = grad; ctx.filter = 'blur(25px)'; ctx.fill(); ctx.restore();
         }
+
         function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            stars.forEach(s => { s.alpha += s.speed; if (s.alpha > 1 || s.alpha < 0) s.speed = -s.speed; ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(s.alpha)})`; ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill(); });
+            // 부드러운 낮/밤 전환 보간 (Ease-out)
+            progress += (targetProgress - progress) * 0.03;
+
+            // 배경 그라데이션 전환 (Night: #030509 -> Day: #38bdf8)
+            const skyTop = interpolateColor('#030509', '#38bdf8', progress);
+            const skyBottom = interpolateColor('#0a1020', '#bae6fd', progress);
+            
+            const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            bgGrad.addColorStop(0, skyTop);
+            bgGrad.addColorStop(1, skyBottom);
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
             tick += 0.015;
-            drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.3)', 'rgba(0, 150, 255, 0.03)', 0.8);
-            drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.2)', 'rgba(140, 0, 255, 0.03)', 1.1);
+
+            // 1. 별 표시 (밤에만 보이고 낮에는 옅어짐)
+            if (progress < 0.8) {
+                const starAlphaMult = 1 - progress;
+                stars.forEach(s => {
+                    s.alpha += s.speed;
+                    if (s.alpha > 1 || s.alpha < 0) s.speed = -s.speed;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(s.alpha) * starAlphaMult})`;
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+
+            // 2. 오로라 드로잉 (낮이 될수록 옅어짐)
+            const auroraOpacity = 1 - progress;
+            drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.35)', 'rgba(0, 150, 255, 0.03)', 0.8, auroraOpacity);
+            drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraOpacity);
+
+            // 3. 일출 / 일몰 및 태양 햇살 효과 (Day 모드 진행도에 따라 오름/내림)
+            if (progress > 0.01) {
+                const sunX = canvas.width * 0.2 + progress * (canvas.width * 0.6);
+                const sunY = canvas.height * 1.1 - progress * (canvas.height * 0.8);
+
+                // 태양 후광
+                const glowGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 250);
+                glowGrad.addColorStop(0, `rgba(255, 245, 180, ${0.8 * progress})`);
+                glowGrad.addColorStop(0.5, `rgba(255, 200, 100, ${0.3 * progress})`);
+                glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = glowGrad;
+                ctx.beginPath();
+                ctx.arc(sunX, sunY, 250, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 햇살 빛갈라짐
+                drawSunRays(sunX, sunY, progress);
+
+                // 태양 본체
+                ctx.beginPath();
+                ctx.arc(sunX, sunY, 40, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 253, 235, ${Math.min(1, progress * 1.2)})`;
+                ctx.shadowColor = 'rgba(255, 240, 150, 0.8)';
+                ctx.shadowBlur = 35;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
             requestAnimationFrame(animate);
         }
         animate();
 
+        // --------------------------------------------------
+        // 시스템 상태 및 이벤트 핸들러
+        // --------------------------------------------------
         let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [] };
-        let selectedManualId = null;
+        let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
 
@@ -643,12 +821,8 @@ MAIN_HTML_TEMPLATE = """
             const editSelect = document.getElementById('m-select-edit');
             if (editSelect) editSelect.innerHTML = '<option value="-1">-- 새 매뉴얼 작성 --</option>';
 
-            const sortedManuals = [...appState.manuals];
+            const sortedManuals = [...appState.manuals].map((m, originalIdx) => ({ ...m, originalIdx }));
             sortedManuals.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-
-            if (!selectedManualId && sortedManuals.length > 0) {
-                selectedManualId = sortedManuals[0].id;
-            }
 
             const categories = {};
             sortedManuals.forEach(item => {
@@ -665,9 +839,9 @@ MAIN_HTML_TEMPLATE = """
 
                 items.forEach(m => {
                     const wrapper = document.createElement('div');
-                    wrapper.className = `aurora-btn-wrapper ${m.id === selectedManualId ? 'active' : ''}`;
+                    wrapper.className = `aurora-btn-wrapper ${m.originalIdx === selectedManualIndex ? 'active' : ''}`;
                     wrapper.innerHTML = `
-                        <button class="item-btn" onclick="selectManualItem(${m.id})">
+                        <button class="item-btn" onclick="selectManualItem(${m.originalIdx})">
                             <span>${m.pinned ? '<span class="pin-badge">📌</span>' : ''}${m.title}</span>
                         </button>
                     `;
@@ -675,30 +849,29 @@ MAIN_HTML_TEMPLATE = """
 
                     if (editSelect) {
                         const opt = document.createElement('option');
-                        opt.value = m.id;
+                        opt.value = m.originalIdx;
                         opt.innerText = `[${catName}] ${m.title}`;
-                        if (m.id === selectedManualId) opt.selected = true;
                         editSelect.appendChild(opt);
                     }
                 });
             }
 
-            const current = appState.manuals.find(m => m.id === selectedManualId);
-            if (current) {
+            if (appState.manuals.length > 0) {
+                const current = appState.manuals[selectedManualIndex] || appState.manuals[0];
                 document.getElementById('doc-title').innerText = `${current.pinned ? '📌 ' : ''}${current.title}`;
                 document.getElementById('doc-body').innerText = current.content;
             }
         }
 
-        function selectManualItem(id) {
-            selectedManualId = id;
+        function selectManualItem(idx) {
+            selectedManualIndex = idx;
             renderCategorizedSidebar();
             transitionToTab('view-manual');
             
             if (appState.role === 'admin') {
-                const current = appState.manuals.find(m => m.id === id);
+                const current = appState.manuals[idx];
                 if (current) {
-                    document.getElementById('m-select-edit').value = id;
+                    document.getElementById('m-select-edit').value = idx;
                     document.getElementById('m-edit-category').value = current.category || '';
                     document.getElementById('m-edit-pinned').checked = !!current.pinned;
                     document.getElementById('m-edit-title').value = current.title || '';
@@ -708,11 +881,18 @@ MAIN_HTML_TEMPLATE = """
         }
 
         function onManualSelectToEdit(val) {
-            const id = parseInt(val);
-            if (id === -1) {
+            const idx = parseInt(val);
+            if (idx === -1) {
                 resetManualForm();
             } else {
-                selectManualItem(id);
+                selectedManualIndex = idx;
+                const current = appState.manuals[idx];
+                if (current) {
+                    document.getElementById('m-edit-category').value = current.category || '';
+                    document.getElementById('m-edit-pinned').checked = !!current.pinned;
+                    document.getElementById('m-edit-title').value = current.title || '';
+                    document.getElementById('m-edit-content').value = current.content || '';
+                }
             }
             const editCard = document.getElementById('manual-edit-card');
             if (editCard) editCard.scrollIntoView({ behavior: 'smooth' });
@@ -818,7 +998,7 @@ MAIN_HTML_TEMPLATE = """
             `}).join('');
 
             const logBox = document.getElementById('admin-log-box');
-            logBox.innerHTML = appState.logs.map(log => `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(255,255,255,0.05); padding-bottom:4px;">${log}</div>`).join('');
+            logBox.innerHTML = appState.logs.map(log => `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(125,125,125,0.2); padding-bottom:4px;">${log}</div>`).join('');
         }
 
         async function searchAndDisplayUser() {
@@ -883,8 +1063,8 @@ MAIN_HTML_TEMPLATE = """
                         <div class="mention-item" onclick="selectMentionUser('${u.id}')">
                             <span style="font-size:16px;">👤</span>
                             <div>
-                                <div style="font-size:13px; font-weight:bold; color:#fff;">${u.name}</div>
-                                <div style="font-size:11px; color:#8a99ad;">ID: ${maskId(u.id)}</div>
+                                <div style="font-size:13px; font-weight:bold; color:var(--text-main);">${u.name}</div>
+                                <div style="font-size:11px; color:var(--text-sub);">ID: ${maskId(u.id)}</div>
                             </div>
                         </div>
                     `).join('');
@@ -914,12 +1094,10 @@ MAIN_HTML_TEMPLATE = """
             const res = await fetch('/api/admin/manual', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: selectedManualId, category, pinned, title, content })
+                body: JSON.stringify({ index: selectedManualIndex, category, pinned, title, content })
             });
 
             if (res.ok) {
-                const data = await res.json();
-                if (data.id) selectedManualId = data.id;
                 showNotification("매뉴얼이 저장되었습니다.");
                 syncSystemState();
             }
@@ -937,25 +1115,24 @@ MAIN_HTML_TEMPLATE = """
         }
 
         async function deleteManualData() {
-            if (!selectedManualId) return showNotification("삭제할 매뉴얼을 선택해주세요.");
             if (!confirm("정말 이 매뉴얼을 삭제하시겠습니까?")) return;
 
             const res = await fetch('/api/admin/manual/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: selectedManualId })
+                body: JSON.stringify({ index: selectedManualIndex })
             });
 
             if (res.ok) {
                 showNotification("매뉴얼이 삭제되었습니다.");
-                selectedManualId = null;
+                selectedManualIndex = 0;
                 resetManualForm();
                 syncSystemState();
             }
         }
 
         function resetManualForm() {
-            selectedManualId = null;
+            selectedManualIndex = appState.manuals.length;
             document.getElementById('m-select-edit').value = -1;
             document.getElementById('m-edit-category').value = '';
             document.getElementById('m-edit-pinned').checked = false;
@@ -1094,8 +1271,8 @@ def get_user_info(user_id):
 
     return jsonify({
         "id": user_id,
-        "username": f"user_{user_id[-4:] if len(user_id) >= 4 else user_id}",
-        "global_name": f"스태프 ({user_id[-4:] if len(user_id) >= 4 else user_id})",
+        "username": f"user_{user_id[-4:]}",
+        "global_name": f"스태프 ({user_id[-4:]})",
         "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png"
     })
 
@@ -1126,43 +1303,30 @@ def admin_manual():
         return jsonify({"error": "forbidden"}), 403
 
     req_data = request.json or {}
-    m_id = req_data.get("id")
+    idx = req_data.get("index")
     category = req_data.get("category", "공통 매뉴얼")
     pinned = req_data.get("pinned", False)
     title = req_data.get("title")
     content = req_data.get("content")
 
     user_name = user.get("global_name") or user.get("username")
-    
-    # 고유 ID로 해당 매뉴얼 탐색
-    target_item = None
-    if m_id is not None:
-        for item in data.get("manuals", []):
-            if item.get("id") == m_id:
-                target_item = item
-                break
+    manual_item = {
+        "id": int(datetime.datetime.now().timestamp()),
+        "category": category,
+        "pinned": pinned,
+        "title": title,
+        "content": content
+    }
 
-    if target_item:
-        target_item["category"] = category
-        target_item["pinned"] = pinned
-        target_item["title"] = title
-        target_item["content"] = content
+    if idx is not None and 0 <= idx < len(data["manuals"]):
+        data["manuals"][idx] = manual_item
         add_log(data, "매뉴얼 수정", user_name, f"매뉴얼 '{title}' 수정 완료")
     else:
-        new_id = int(time.time() * 1000)
-        manual_item = {
-            "id": new_id,
-            "category": category,
-            "pinned": pinned,
-            "title": title,
-            "content": content
-        }
-        data.setdefault("manuals", []).append(manual_item)
-        m_id = new_id
+        data["manuals"].append(manual_item)
         add_log(data, "매뉴얼 등록", user_name, f"새 매뉴얼 '{title}' 등록 완료")
 
     save_data(data)
-    return jsonify({"status": "success", "id": m_id})
+    return jsonify({"status": "success"})
 
 @app.route("/api/admin/manual/delete", methods=["POST"])
 def admin_manual_delete():
@@ -1174,16 +1338,12 @@ def admin_manual_delete():
     if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
         return jsonify({"error": "forbidden"}), 403
 
-    m_id = request.json.get("id")
-    if m_id is not None:
-        manuals = data.get("manuals", [])
-        for idx, item in enumerate(manuals):
-            if item.get("id") == m_id:
-                deleted = manuals.pop(idx)
-                user_name = user.get("global_name") or user.get("username")
-                add_log(data, "매뉴얼 삭제", user_name, f"매뉴얼 '{deleted.get('title')}' 삭제 완료")
-                save_data(data)
-                break
+    idx = request.json.get("index")
+    if idx is not None and 0 <= idx < len(data["manuals"]):
+        deleted = data["manuals"].pop(idx)
+        user_name = user.get("global_name") or user.get("username")
+        add_log(data, "매뉴얼 삭제", user_name, f"매뉴얼 '{deleted.get('title')}' 삭제 완료")
+        save_data(data)
 
     return jsonify({"status": "success"})
 
@@ -1270,7 +1430,7 @@ def admin_permission_batch():
         elif action == "remove":
             if uid in data.get("user_whitelist", []):
                 data["user_whitelist"].remove(uid)
-            if uid in data.get("user_blacklist", []):
+            if uid in data.get("blacklist", []):
                 data["user_blacklist"].remove(uid)
 
     add_log(data, "일괄 권한 변경", user_name, f"유저 {len(user_ids)}명에 대해 '{action}' 처리 수행")
