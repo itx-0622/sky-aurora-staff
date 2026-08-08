@@ -161,16 +161,16 @@ MAIN_HTML_TEMPLATE = r"""
         
         :root {
             --bg-body: #030509;
-            --container-bg: rgba(10, 15, 30, 0.55);
+            --container-bg: rgba(10, 15, 30, 0.38);
             --container-border: rgba(0, 255, 200, 0.3);
             --glass-glow: rgba(0, 255, 200, 0.15);
             --text-main: #ffffff;
             --text-sub: #cbd5e1;
-            --header-bg: rgba(8, 12, 24, 0.65);
-            --sidebar-bg: rgba(5, 8, 18, 0.45);
-            --card-bg: rgba(12, 18, 36, 0.55);
-            --input-bg: rgba(5, 8, 16, 0.65);
-            --btn-item-bg: rgba(15, 23, 42, 0.75);
+            --header-bg: rgba(8, 12, 24, 0.45);
+            --sidebar-bg: rgba(5, 8, 18, 0.28);
+            --card-bg: rgba(12, 18, 36, 0.35);
+            --input-bg: rgba(5, 8, 16, 0.5);
+            --btn-item-bg: rgba(15, 23, 42, 0.55);
             --intro-bg: #030509;
             --intro-border: #00ffaa;
             --intro-text: #ffffff;
@@ -181,22 +181,64 @@ MAIN_HTML_TEMPLATE = r"""
 
         body.day-theme {
             --bg-body: #e0f2fe;
-            --container-bg: rgba(255, 255, 255, 0.55);
+            --container-bg: rgba(255, 255, 255, 0.35);
             --container-border: rgba(56, 189, 248, 0.5);
             --glass-glow: rgba(56, 189, 248, 0.2);
             --text-main: #0f172a;
             --text-sub: #334155;
-            --header-bg: rgba(241, 245, 249, 0.7);
-            --sidebar-bg: rgba(255, 255, 255, 0.4);
-            --card-bg: rgba(255, 255, 255, 0.65);
-            --input-bg: rgba(255, 255, 255, 0.85);
-            --btn-item-bg: rgba(241, 245, 249, 0.85);
+            --header-bg: rgba(241, 245, 249, 0.45);
+            --sidebar-bg: rgba(255, 255, 255, 0.25);
+            --card-bg: rgba(255, 255, 255, 0.4);
+            --input-bg: rgba(255, 255, 255, 0.6);
+            --btn-item-bg: rgba(241, 245, 249, 0.55);
             --intro-bg: #f0f9ff;
             --intro-border: #0284c7;
             --intro-text: #0f172a;
             --flip-bg: #ffffff;
             --flip-text: #0f172a;
             --flip-border: rgba(2, 132, 199, 0.4);
+        }
+
+        /* 🌇 일몰 모드: 짙은 레드-오렌지 톤 (해가 오른쪽에서 짐) */
+        body.sunset-theme {
+            --bg-body: #1a0a06;
+            --container-bg: rgba(40, 15, 8, 0.32);
+            --container-border: rgba(255, 110, 50, 0.45);
+            --glass-glow: rgba(255, 90, 40, 0.25);
+            --text-main: #fff2e8;
+            --text-sub: #ffcfa8;
+            --header-bg: rgba(35, 14, 8, 0.42);
+            --sidebar-bg: rgba(30, 10, 6, 0.26);
+            --card-bg: rgba(45, 18, 10, 0.32);
+            --input-bg: rgba(20, 8, 5, 0.48);
+            --btn-item-bg: rgba(50, 20, 12, 0.5);
+            --intro-bg: #180a05;
+            --intro-border: #ff7a3c;
+            --intro-text: #fff2e8;
+            --flip-bg: #2a1207;
+            --flip-text: #ff9b5c;
+            --flip-border: rgba(255, 120, 50, 0.4);
+        }
+
+        /* 🌅 일출 모드: 파스텔 핑크-오렌지 톤 (해가 왼쪽에서 뜸) - 일몰과 확실히 다른 색감 */
+        body.sunrise-theme {
+            --bg-body: #170a16;
+            --container-bg: rgba(45, 18, 32, 0.30);
+            --container-border: rgba(255, 150, 190, 0.45);
+            --glass-glow: rgba(255, 150, 190, 0.22);
+            --text-main: #fff0f5;
+            --text-sub: #ffd0e0;
+            --header-bg: rgba(40, 16, 30, 0.4);
+            --sidebar-bg: rgba(35, 14, 26, 0.24);
+            --card-bg: rgba(50, 20, 38, 0.3);
+            --input-bg: rgba(25, 10, 20, 0.46);
+            --btn-item-bg: rgba(55, 22, 42, 0.48);
+            --intro-bg: #170a14;
+            --intro-border: #ff9ec4;
+            --intro-text: #fff0f5;
+            --flip-bg: #2a1420;
+            --flip-text: #ffb3d1;
+            --flip-border: rgba(255, 150, 190, 0.4);
         }
 
         body {
@@ -324,14 +366,24 @@ MAIN_HTML_TEMPLATE = r"""
         .flip-colon { font-size: 16px; color: var(--flip-text); font-weight: bold; animation: blink 1s infinite; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-        .theme-toggle-btn {
-            background: rgba(255, 255, 255, 0.12); border: 1px solid var(--container-border);
-            color: var(--text-main); font-family: 'Pretendard'; font-size: 12px; font-weight: bold;
-            padding: 7px 15px; border-radius: 20px; cursor: pointer; transition: all 0.3s;
-            display: flex; align-items: center; gap: 6px; backdrop-filter: blur(10px);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+        .theme-mode-group { position: relative; display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.08); border: 1px solid var(--container-border); border-radius: 20px; padding: 4px; backdrop-filter: blur(10px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+        .theme-mode-btn {
+            background: transparent; border: none; color: var(--text-sub); font-family: 'Pretendard'; font-size: 15px;
+            width: 30px; height: 30px; border-radius: 50%; cursor: pointer; transition: all 0.25s;
+            display: flex; align-items: center; justify-content: center;
         }
-        .theme-toggle-btn:hover { transform: translateY(-1px) scale(1.03); box-shadow: 0 0 15px var(--glass-glow); }
+        .theme-mode-btn:hover { background: rgba(255,255,255,0.12); transform: translateY(-1px) scale(1.08); }
+        .theme-mode-btn.active { background: var(--glass-glow); color: var(--text-main); box-shadow: 0 0 12px var(--glass-glow), inset 0 0 0 1px var(--container-border); }
+        .theme-mode-group.theme-locked .theme-mode-btn { pointer-events: none; opacity: 0.35; }
+        .theme-mode-status {
+            position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: 6px;
+            background: rgba(5, 8, 16, 0.75); border-radius: 20px; color: #00ffaa; font-size: 11px; font-weight: bold;
+            font-family: 'Pretendard'; backdrop-filter: blur(6px); white-space: nowrap; padding: 0 10px;
+        }
+        .theme-mode-status .spin-dot { width: 6px; height: 6px; border-radius: 50%; background: #00ffaa; animation: modeDotPulse 0.9s ease-in-out infinite; }
+        .theme-mode-status .spin-dot:nth-child(2) { animation-delay: 0.15s; }
+        .theme-mode-status .spin-dot:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes modeDotPulse { 0%, 100% { opacity: 0.25; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1.1); } }
 
         .badge-admin { background: rgba(255, 45, 85, 0.2); border: 1px solid #ff2d55; color: #ff2d55; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; font-weight: bold; }
         .badge-staff { background: rgba(0, 255, 170, 0.2); border: 1px solid #00ffaa; color: #00ffaa; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; font-weight: bold; }
@@ -565,9 +617,16 @@ MAIN_HTML_TEMPLATE = r"""
                     </div>
                 </div>
 
-                <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleThemeMode()">
-                    <span id="themeBtnIcon">☀️</span> <span id="themeBtnText">데이 모드</span>
-                </button>
+                <div id="themeModeGroup" class="theme-mode-group">
+                    <button class="theme-mode-btn" data-mode="night" title="나이트 모드" onclick="setThemeMode('night')">🌙</button>
+                    <button class="theme-mode-btn" data-mode="sunrise" title="일출 모드" onclick="setThemeMode('sunrise')">🌅</button>
+                    <button class="theme-mode-btn" data-mode="day" title="데이 모드" onclick="setThemeMode('day')">☀️</button>
+                    <button class="theme-mode-btn" data-mode="sunset" title="일몰 모드" onclick="setThemeMode('sunset')">🌇</button>
+                    <div id="themeModeStatus" class="theme-mode-status">
+                        <span class="spin-dot"></span><span class="spin-dot"></span><span class="spin-dot"></span>
+                        변경 중...
+                    </div>
+                </div>
                 <div id="user-header-info" style="display:none; align-items:center; gap:12px;">
                     <span id="user-role-badge" class="badge-staff">STAFF</span>
                     <img id="user-avatar" src="" alt="Avatar" class="avatar-img" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
@@ -788,50 +847,72 @@ MAIN_HTML_TEMPLATE = r"""
         function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
         window.addEventListener('resize', resize); resize();
 
-        let savedTheme = localStorage.getItem('sky_theme_mode');
-        let currentMode;
+        // 🌗 4단계 하늘 모드: night(나이트) → sunrise(일출) → day(데이) → sunset(일몰)
+        const SKY_MODES = {
+            night:   { skyTop: '#030509', skyBottom: '#0a1020', sunAlpha: 0,    sunXR: 0.5,  sunYR: 1.25, moonAlpha: 1,    moonXR: 0.78, moonYR: 0.22, starsAlpha: 1,    auroraAlpha: 1,   overlayColor: '#000000', overlayAlpha: 0,    meteors: true  },
+            sunrise: { skyTop: '#3b3466', skyBottom: '#ffcf7a', sunAlpha: 0.95, sunXR: 0.22, sunYR: 0.64, moonAlpha: 0.12, moonXR: 0.86, moonYR: 0.16, starsAlpha: 0.12, auroraAlpha: 0.1, overlayColor: '#ff9a78', overlayAlpha: 0.32, meteors: false },
+            day:     { skyTop: '#38bdf8', skyBottom: '#bae6fd', sunAlpha: 1,    sunXR: 0.8,  sunYR: 0.22, moonAlpha: 0,    moonXR: 0.2,  moonYR: 0.2,  starsAlpha: 0,    auroraAlpha: 0,   overlayColor: '#ffffff', overlayAlpha: 0,    meteors: false },
+            sunset:  { skyTop: '#33184a', skyBottom: '#ff4e1f', sunAlpha: 0.95, sunXR: 0.78, sunYR: 0.68, moonAlpha: 0.1,  moonXR: 0.14, moonYR: 0.18, starsAlpha: 0.15, auroraAlpha: 0.1, overlayColor: '#ff5020', overlayAlpha: 0.42, meteors: false },
+        };
+        const MODE_ORDER = ['night', 'sunrise', 'day', 'sunset'];
+        const THEME_TRANSITION_MS = 1300;
 
-        if (savedTheme) {
-            currentMode = savedTheme;
-        } else {
-            // 로컬(브라우저) 시간이 아니라 한국시간(KST, UTC+9) 기준으로 낮/밤 판정
+        let savedTheme = localStorage.getItem('sky_theme_mode');
+        if (!savedTheme || !SKY_MODES[savedTheme]) {
             const nowForTheme = new Date();
             const utcForTheme = nowForTheme.getTime() + (nowForTheme.getTimezoneOffset() * 60000);
             const kstForTheme = new Date(utcForTheme + (9 * 3600000));
-            const currentHour = kstForTheme.getHours();
-            currentMode = (currentHour >= 6 && currentHour < 18) ? 'day' : 'night';
+            const h = kstForTheme.getHours();
+            savedTheme = (h >= 5 && h < 7) ? 'sunrise' : (h >= 7 && h < 17) ? 'day' : (h >= 17 && h < 19) ? 'sunset' : 'night';
         }
 
-        let progress = currentMode === 'day' ? 1.0 : 0.0;
-        let targetProgress = progress;
+        let currentMode = savedTheme;
+        let skyFromMode = savedTheme;
+        let skyTransitionStart = null; // null = 전환 없음(즉시 목표 상태)
+        let themeChanging = false;
 
-        applyThemeUI(currentMode);
+        function skyProgressT() {
+            if (skyTransitionStart === null) return 1;
+            const elapsed = performance.now() - skyTransitionStart;
+            const raw = Math.min(1, elapsed / THEME_TRANSITION_MS);
+            return 1 - Math.pow(1 - raw, 3); // ease-out
+        }
 
-        function toggleThemeMode() {
-            if (targetProgress === 0) {
-                targetProgress = 1.0;
-                currentMode = 'day';
-            } else {
-                targetProgress = 0.0;
-                currentMode = 'night';
-            }
-            localStorage.setItem('sky_theme_mode', currentMode);
-            applyThemeUI(currentMode);
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        function setThemeMode(mode) {
+            if (themeChanging || mode === currentMode || !SKY_MODES[mode]) return;
+            themeChanging = true;
+            skyFromMode = currentMode;
+            currentMode = mode;
+            skyTransitionStart = performance.now();
+            localStorage.setItem('sky_theme_mode', mode);
+            applyThemeUI(mode);
+
+            const group = document.getElementById('themeModeGroup');
+            const status = document.getElementById('themeModeStatus');
+            if (group) group.classList.add('theme-locked');
+            if (status) status.style.display = 'flex';
+
+            setTimeout(() => {
+                themeChanging = false;
+                skyTransitionStart = null;
+                if (group) group.classList.remove('theme-locked');
+                if (status) status.style.display = 'none';
+            }, THEME_TRANSITION_MS);
         }
 
         function applyThemeUI(mode) {
-            const btnIcon = document.getElementById('themeBtnIcon');
-            const btnText = document.getElementById('themeBtnText');
-            if (mode === 'day') {
-                document.body.classList.add('day-theme');
-                btnIcon.innerText = '🌙';
-                btnText.innerText = '밤 모드';
-            } else {
-                document.body.classList.remove('day-theme');
-                btnIcon.innerText = '☀️';
-                btnText.innerText = '데이 모드';
-            }
+            document.body.classList.remove('day-theme', 'sunset-theme', 'sunrise-theme');
+            if (mode === 'day') document.body.classList.add('day-theme');
+            else if (mode === 'sunset') document.body.classList.add('sunset-theme');
+            else if (mode === 'sunrise') document.body.classList.add('sunrise-theme');
+
+            document.querySelectorAll('.theme-mode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
         }
+        applyThemeUI(currentMode);
 
         function hexToRgb(hex) {
             const bigint = parseInt(hex.replace('#', ''), 16);
@@ -847,13 +928,65 @@ MAIN_HTML_TEMPLATE = r"""
             return `rgb(${r}, ${g}, ${b})`;
         }
 
-        const stars = Array.from({ length: 120 }, () => ({
+        const stars = Array.from({ length: 150 }, () => ({
             x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
+            y: Math.random() * canvas.height * 0.75,
             size: Math.random() * 2,
             alpha: Math.random(),
             speed: Math.random() * 0.012 + 0.005
         }));
+
+        // 🌌 별자리처럼 가까운 별들을 랜덤하게 선으로 연결
+        const constellationLines = [];
+        (function buildConstellations() {
+            for (let i = 0; i < stars.length; i++) {
+                if (Math.random() > 0.32) continue;
+                let nearest = -1, nearestDist = Infinity;
+                for (let j = 0; j < stars.length; j++) {
+                    if (i === j) continue;
+                    const dx = stars[i].x - stars[j].x, dy = stars[i].y - stars[j].y;
+                    const d = dx * dx + dy * dy;
+                    if (d < nearestDist && d < 150 * 150) { nearestDist = d; nearest = j; }
+                }
+                if (nearest !== -1) constellationLines.push([i, nearest]);
+            }
+        })();
+
+        // ☄️ 별똥별(유성)
+        let meteors = [];
+        function maybeSpawnMeteor(enabled) {
+            if (!enabled) return;
+            if (Math.random() < 0.035) {
+                meteors.push({
+                    x: Math.random() * canvas.width * 0.7 + canvas.width * 0.15,
+                    y: Math.random() * canvas.height * 0.25,
+                    len: 90 + Math.random() * 70,
+                    speed: 9 + Math.random() * 7,
+                    angle: Math.PI / 3.6 + (Math.random() - 0.5) * 0.3,
+                    life: 1
+                });
+            }
+        }
+        function drawMeteors() {
+            meteors.forEach(m => {
+                m.x += Math.cos(m.angle) * m.speed;
+                m.y += Math.sin(m.angle) * m.speed;
+                m.life -= 0.018;
+                const tailX = m.x - Math.cos(m.angle) * m.len;
+                const tailY = m.y - Math.sin(m.angle) * m.len;
+                const grad = ctx.createLinearGradient(m.x, m.y, tailX, tailY);
+                grad.addColorStop(0, `rgba(255, 255, 255, ${Math.max(0, m.life)})`);
+                grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(m.x, m.y);
+                ctx.lineTo(tailX, tailY);
+                ctx.stroke();
+            });
+            meteors = meteors.filter(m => m.life > 0 && m.x < canvas.width + 150 && m.y < canvas.height + 150);
+        }
 
         let tick = 0;
 
@@ -909,58 +1042,78 @@ MAIN_HTML_TEMPLATE = r"""
         }
 
         function animate() {
-            progress += (targetProgress - progress) * 0.02;
+            const t = skyProgressT();
+            const from = SKY_MODES[skyFromMode];
+            const to = SKY_MODES[currentMode];
 
-            const sunsetOpacity = Math.max(0, 1 - Math.abs(progress - 0.5) * 2.2);
+            const skyTop = interpolateColor(from.skyTop, to.skyTop, t);
+            const skyBottom = interpolateColor(from.skyBottom, to.skyBottom, t);
+            const sunAlpha = lerp(from.sunAlpha, to.sunAlpha, t);
+            const sunXR = lerp(from.sunXR, to.sunXR, t);
+            const sunYR = lerp(from.sunYR, to.sunYR, t);
+            const moonAlpha = lerp(from.moonAlpha, to.moonAlpha, t);
+            const moonXR = lerp(from.moonXR, to.moonXR, t);
+            const moonYR = lerp(from.moonYR, to.moonYR, t);
+            const starsAlpha = lerp(from.starsAlpha, to.starsAlpha, t);
+            const auroraAlpha = lerp(from.auroraAlpha, to.auroraAlpha, t);
+            const overlayColor = interpolateColor(from.overlayColor, to.overlayColor, t);
+            const overlayAlpha = lerp(from.overlayAlpha, to.overlayAlpha, t);
+            const meteorsEnabled = (t >= 1) && to.meteors;
 
-            const skyTop = interpolateColor('#030509', '#38bdf8', progress);
-            const skyBottom = interpolateColor('#0a1020', '#bae6fd', progress);
-            
             const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
             bgGrad.addColorStop(0, skyTop);
             bgGrad.addColorStop(1, skyBottom);
             ctx.fillStyle = bgGrad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            if (sunsetOpacity > 0.01) {
-                const sunsetLayer = ctx.createLinearGradient(0, 0, 0, canvas.height);
-                sunsetLayer.addColorStop(0, `rgba(255, 100, 50, ${sunsetOpacity * 0.4})`);
-                sunsetLayer.addColorStop(0.5, `rgba(255, 130, 0, ${sunsetOpacity * 0.6})`);
-                sunsetLayer.addColorStop(1, `rgba(255, 180, 80, ${sunsetOpacity * 0.8})`);
-                
+            if (overlayAlpha > 0.005) {
                 ctx.save();
-                ctx.globalCompositeOperation = 'color-dodge';
-                ctx.fillStyle = sunsetLayer;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.globalAlpha = overlayAlpha;
+                ctx.fillStyle = overlayColor;
+                ctx.fillRect(0, 0, canvas.width, canvas.height * 0.7);
                 ctx.restore();
             }
 
             tick += 0.015;
 
-            if (progress < 0.8) {
-                const starAlphaMult = 1 - progress;
+            // 🌌 별자리 연결선 + 별
+            if (starsAlpha > 0.01) {
+                ctx.save();
+                ctx.strokeStyle = `rgba(150, 210, 255, ${0.18 * starsAlpha})`;
+                ctx.lineWidth = 1;
+                constellationLines.forEach(([a, b]) => {
+                    ctx.beginPath();
+                    ctx.moveTo(stars[a].x, stars[a].y);
+                    ctx.lineTo(stars[b].x, stars[b].y);
+                    ctx.stroke();
+                });
+                ctx.restore();
+
                 stars.forEach(s => {
                     s.alpha += s.speed;
                     if (s.alpha > 1 || s.alpha < 0) s.speed = -s.speed;
-                    ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(s.alpha) * starAlphaMult})`;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(s.alpha) * starsAlpha})`;
                     ctx.beginPath();
                     ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
                     ctx.fill();
                 });
             }
 
-            const auroraOpacity = 1 - progress;
-            drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.35)', 'rgba(0, 150, 255, 0.03)', 0.8, auroraOpacity);
-            drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraOpacity);
+            // ☄️ 별똥별
+            maybeSpawnMeteor(meteorsEnabled);
+            drawMeteors();
 
-            const moonOpacity = Math.max(0, 1 - progress * 1.5);
-            if (moonOpacity > 0) {
-                const moonX = canvas.width * 0.78;
-                const moonY = (canvas.height * 0.22) + (progress * canvas.height * 0.8);
+            drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.35)', 'rgba(0, 150, 255, 0.03)', 0.8, auroraAlpha);
+            drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraAlpha);
+
+            // 🌙 달
+            if (moonAlpha > 0.005) {
+                const moonX = canvas.width * moonXR;
+                const moonY = canvas.height * moonYR;
                 const moonRadius = 32;
 
                 const moonGlow = ctx.createRadialGradient(moonX, moonY, 5, moonX, moonY, moonRadius * 2.5);
-                moonGlow.addColorStop(0, `rgba(220, 235, 255, ${0.35 * moonOpacity})`);
+                moonGlow.addColorStop(0, `rgba(220, 235, 255, ${0.35 * moonAlpha})`);
                 moonGlow.addColorStop(1, 'rgba(255, 255, 255, 0)');
                 ctx.fillStyle = moonGlow;
                 ctx.beginPath();
@@ -969,46 +1122,45 @@ MAIN_HTML_TEMPLATE = r"""
 
                 ctx.beginPath();
                 ctx.arc(moonX, moonY, moonRadius, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(240, 246, 255, ${moonOpacity})`;
-                ctx.shadowColor = `rgba(200, 220, 255, ${0.6 * moonOpacity})`;
+                ctx.fillStyle = `rgba(240, 246, 255, ${moonAlpha})`;
+                ctx.shadowColor = `rgba(200, 220, 255, ${0.6 * moonAlpha})`;
                 ctx.shadowBlur = 25;
                 ctx.fill();
                 ctx.shadowBlur = 0;
 
                 ctx.beginPath();
                 ctx.arc(moonX - 8, moonY - 6, moonRadius * 0.85, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(205, 218, 240, ${0.5 * moonOpacity})`;
+                ctx.fillStyle = `rgba(205, 218, 240, ${0.5 * moonAlpha})`;
                 ctx.fill();
             }
 
-            const sunArcAngle = progress * Math.PI;
-            const sunX = canvas.width * 0.15 + progress * (canvas.width * 0.7);
-            const baseSunY = (canvas.height * 0.85) - Math.sin(sunArcAngle) * (canvas.height * 0.55);
-            const nightOffset = (1 - Math.sin(sunArcAngle)) * canvas.height * 0.6; 
-            const sunY = baseSunY + nightOffset;
+            // ☀️ 해 (모드별 목표 위치로 자연스럽게 뜨고 짐 - 원 궤적을 그리지 않고 목표 위치로 수렴)
+            if (sunAlpha > 0.005) {
+                const sunX = canvas.width * sunXR;
+                const sunY = canvas.height * sunYR;
+                const warmth = lerp(from.overlayAlpha, to.overlayAlpha, t); // 노을 정도(레이/색상 웜톤에 사용)
 
-            if (sunY < canvas.height + 100) {
                 const r = 255;
-                const g = 245 - sunsetOpacity * 100;
-                const b = 180 - sunsetOpacity * 180;
+                const g = 245 - warmth * 100;
+                const b = 200 - warmth * 170;
 
                 const glowGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 350);
-                glowGrad.addColorStop(0, `rgba(${r}, ${g}, ${Math.max(0, b)}, ${0.8 * progress})`);
-                glowGrad.addColorStop(0.5, `rgba(${r}, ${g - 30}, ${Math.max(0, b - 50)}, ${0.4 * progress})`);
+                glowGrad.addColorStop(0, `rgba(${r}, ${g}, ${Math.max(0, b)}, ${0.8 * sunAlpha})`);
+                glowGrad.addColorStop(0.5, `rgba(${r}, ${g - 30}, ${Math.max(0, b - 50)}, ${0.4 * sunAlpha})`);
                 glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-                
+
                 ctx.fillStyle = glowGrad;
                 ctx.beginPath();
                 ctx.arc(sunX, sunY, 350, 0, Math.PI * 2);
                 ctx.fill();
 
-                drawSunRays(sunX, sunY, progress, sunsetOpacity);
+                drawSunRays(sunX, sunY, sunAlpha, warmth);
 
                 ctx.beginPath();
                 ctx.arc(sunX, sunY, 40, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(255, 253, ${235 - sunsetOpacity * 100}, ${Math.min(1, progress * 1.2)})`;
+                ctx.fillStyle = `rgba(255, 253, ${235 - warmth * 100}, ${sunAlpha})`;
                 ctx.shadowColor = `rgba(${r}, ${g}, ${Math.max(0, b)}, 0.8)`;
-                ctx.shadowBlur = 40 + sunsetOpacity * 20;
+                ctx.shadowBlur = 40 + warmth * 20;
                 ctx.fill();
                 ctx.shadowBlur = 0;
             }
