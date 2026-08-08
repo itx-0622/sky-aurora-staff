@@ -24,6 +24,7 @@ DEFAULT_ADMINS = ["1534184089144266872", "843621337066504225"]
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # --------------------------------------------------
 # 📁 데이터 불러오기 및 영구 저장 로직
@@ -61,13 +62,17 @@ def load_data():
         "user_whitelist": [],
         "user_blacklist": [],
         "user_profiles": {},
+        "quiz_config": {
+            "difficulty": "medium",
+            "count": 3
+        },
         "manuals": [
             {
                 "id": 1,
                 "category": "보안 지침",
                 "pinned": True,
                 "title": "01. 기본 보안 규칙",
-                "content": "본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.\n\n1. 본 시스템 화면 캡처 및 무단 촬영 금지\n2. 계정 타인 공유 금지\n3. 접속 IP 및 접근 기록 실시간 로깅 중"
+                "content": "<h2 style='color:#00ffaa;'>기본 보안 가이드라인</h2><p>본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.</p><hr/><p><mark style='background-color:#fef08a; color:#000; padding:2px 6px; border-radius:4px;'>📌 필수 유의사항</mark></p><p>1. 화면 캡처 금지<br/>2. 계정 공유 금지<br/>3. 실시간 접속 기록 로깅 중</p><p>참고 영상: https://www.youtube.com/watch?v=dQw4w9WgXcQ</p>"
             }
         ],
         "logs": []
@@ -87,8 +92,10 @@ def save_data(data):
             json_str = json.dumps(data, ensure_ascii=False, indent=2)
             encoded_content = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
             
+            # KST 시간 기준 저장 로깅
+            now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
             payload = {
-                "message": f"Auto-sync manual data [{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]",
+                "message": f"Auto-sync manual data [{now_kst} KST]",
                 "content": encoded_content
             }
             if sha:
@@ -99,14 +106,14 @@ def save_data(data):
             print(f"[GitHub Sync Save Error] {e}")
 
 def add_log(data, category, user_name, action, device_type="PC"):
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{now}] [{category}] [{device_type}] {user_name}: {action}"
+    now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{now_kst} KST] [{category}] [{device_type}] {user_name}: {action}"
     if "logs" not in data:
         data["logs"] = []
     data["logs"].insert(0, log_entry)
 
 # --------------------------------------------------
-# 🎨 프론트엔드 UI/UX (낮/밤 모드 & 동적 오로라/태양 반영)
+# 🎨 프론트엔드 UI/UX
 # --------------------------------------------------
 MAIN_HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -139,6 +146,9 @@ MAIN_HTML_TEMPLATE = """
             --card-bg: rgba(5, 8, 17, 0.7);
             --input-bg: rgba(3, 5, 9, 0.8);
             --btn-item-bg: rgba(10, 16, 32, 0.95);
+            --intro-bg: #030509;
+            --intro-border: #00ffaa;
+            --intro-text: #ffffff;
         }
 
         body.day-theme {
@@ -152,6 +162,9 @@ MAIN_HTML_TEMPLATE = """
             --card-bg: rgba(255, 255, 255, 0.75);
             --input-bg: rgba(255, 255, 255, 0.9);
             --btn-item-bg: rgba(241, 245, 249, 0.95);
+            --intro-bg: #f0f9ff;
+            --intro-border: #0284c7;
+            --intro-text: #0f172a;
         }
 
         body {
@@ -180,8 +193,8 @@ MAIN_HTML_TEMPLATE = """
 
         #intro-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: #030509; z-index: 99999; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; opacity: 1; transition: opacity 0.8s ease;
+            background: var(--intro-bg); z-index: 99999; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; opacity: 1; transition: opacity 0.8s ease, background 0.5s ease;
         }
         
         .intro-circle-container {
@@ -198,11 +211,11 @@ MAIN_HTML_TEMPLATE = """
         .intro-avatar {
             width: 100px; height: 100px; border-radius: 50%; object-fit: cover;
             opacity: 0; transform: scale(0.6); transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-            border: 2px solid #00ffaa; box-shadow: 0 0 25px rgba(0,255,170,0.6); z-index: 2;
+            border: 2px solid var(--intro-border); box-shadow: 0 0 25px rgba(0,255,170,0.6); z-index: 2;
         }
         .intro-avatar.show { opacity: 1; transform: scale(1); }
-        .intro-progress-text { font-size: 28px; color: #00ffaa; font-family: 'GmarketSansBold'; letter-spacing: 1px; }
-        .intro-welcome-text { font-size: 18px; color: #ffffff; font-family: 'Pretendard'; font-weight: 600; margin-top: 16px; opacity: 0; transition: opacity 0.5s ease; text-align: center; padding: 0 20px; }
+        .intro-progress-text { font-size: 28px; color: var(--intro-border); font-family: 'GmarketSansBold'; letter-spacing: 1px; }
+        .intro-welcome-text { font-size: 18px; color: var(--intro-text); font-family: 'Pretendard'; font-weight: 600; margin-top: 16px; opacity: 0; transition: opacity 0.5s ease; text-align: center; padding: 0 20px; }
         .intro-welcome-text.show { opacity: 1; }
 
         #bg-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
@@ -254,9 +267,14 @@ MAIN_HTML_TEMPLATE = """
         .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; scroll-behavior: smooth; }
         .content-card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid rgba(125, 125, 125, 0.15); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: relative; margin-bottom: 20px; transition: background 0.5s ease; }
         
-        .doc-title { font-size: 20px; margin-bottom: 16px; color: var(--text-main); border-bottom: 1px solid rgba(125, 125, 125, 0.2); padding-bottom: 12px; display: flex; align-items: center; gap: 10px; }
-        .doc-title::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
-        .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); white-space: pre-wrap; background: rgba(0, 0, 0, 0.15); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
+        .doc-title { font-size: 20px; margin-bottom: 16px; color: var(--text-main); border-bottom: 1px solid rgba(125, 125, 125, 0.2); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        .doc-title-text { display: flex; align-items: center; gap: 10px; }
+        .doc-title-text::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
+        .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); background: rgba(0, 0, 0, 0.15); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
+
+        /* 동영상 미리보기 박스 스타일 */
+        .video-embed-box { margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px; border: 1px solid rgba(0, 255, 170, 0.3); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+        .video-embed-box iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
 
         input, textarea, select { width: 100%; background: var(--input-bg); color: var(--text-main); border: 1px solid rgba(125, 125, 125, 0.3); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; }
         input:focus, textarea:focus, select:focus { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
@@ -276,6 +294,24 @@ MAIN_HTML_TEMPLATE = """
         .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
         .btn-danger:hover { box-shadow: 0 0 15px rgba(255, 45, 85, 0.6); }
         .btn-secondary { background: linear-gradient(135deg, #475569, #334155); }
+
+        .editor-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 10px; }
+        .editor-toolbar button { padding: 6px 10px; font-size: 12px; background: var(--btn-item-bg); color: var(--text-main); border: 1px solid rgba(125,125,125,0.3); border-radius: 6px; cursor: pointer; font-family: 'Pretendard'; }
+        .editor-toolbar button:hover { border-color: #00ffaa; color: #00ffaa; }
+
+        .speech-bubble-pop {
+            position: absolute; background: #00ffaa; color: #030509; padding: 10px 16px; border-radius: 12px;
+            font-size: 13px; font-weight: bold; font-family: 'Pretendard'; z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .speech-bubble-pop::after {
+            content: ''; position: absolute; bottom: -8px; left: 20px; border-width: 8px 8px 0; border-style: solid; border-color: #00ffaa transparent; display: block; width: 0;
+        }
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .key-display { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.3); border-radius: 12px; margin-top: 10px; }
+        .key-cap { background: #334155; color: #fff; padding: 10px 16px; border-radius: 8px; border-bottom: 4px solid #1e293b; font-family: monospace; font-size: 18px; font-weight: bold; }
+        .key-cap.active { background: #00ffaa; color: #000; border-bottom-color: #00cc88; transform: translateY(2px); }
 
         ul.data-list { list-style: none; padding: 0; }
         ul.data-list li { background: var(--btn-item-bg); padding: 14px; margin-bottom: 10px; border-radius: 12px; border: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
@@ -344,6 +380,13 @@ MAIN_HTML_TEMPLATE = """
                 if (k === 'c') notifyLog("복사 감지 (Ctrl+C)");
                 if (k === 'v') notifyLog("붙여넣기 감지 (Ctrl+V)");
                 if (['c', 'v', 'u', 's', 'p', 'a', 'i', 'j'].includes(k)) { triggerSecurityLock(); }
+            }
+            
+            const keyCap = document.getElementById('active-key-cap');
+            if(keyCap) {
+                keyCap.innerText = e.key.toUpperCase();
+                keyCap.classList.add('active');
+                setTimeout(() => keyCap.classList.remove('active'), 300);
             }
         }, true);
 
@@ -417,6 +460,10 @@ MAIN_HTML_TEMPLATE = """
             <div class="sidebar">
                 <div id="manual-sidebar-categorized"></div>
 
+                <div class="aurora-btn-wrapper" style="margin-top:15px;">
+                    <button class="item-btn" onclick="transitionToTab('view-quiz')">🧩 AI 매뉴얼 퀴즈</button>
+                </div>
+
                 <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(125,125,125,0.2); padding-top:10px;">
                     <div class="sidebar-category-title" style="color:#38bdf8;">Admin Controls</div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-m-manage">
@@ -433,12 +480,40 @@ MAIN_HTML_TEMPLATE = """
 
             <div class="main-content" id="main-content-area">
                 <div id="view-manual" class="tab-enter" style="display:block;">
-                    <div id="doc-title" class="doc-title">매뉴얼 선택 중...</div>
+                    <div class="doc-title">
+                        <div id="doc-title" class="doc-title-text">매뉴얼 선택 중...</div>
+                        <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); display:flex; align-items:center; gap:6px; cursor:pointer;">
+                            <input type="checkbox" id="embed-preview-toggle" onchange="toggleEmbedPreview(this.checked)" checked style="width:auto; margin:0;">
+                            🎥 링크 미리보기 켜기
+                        </label>
+                    </div>
                     <div id="doc-body" class="doc-body"></div>
                 </div>
 
+                <!-- AI 퀴즈 탭 -->
+                <div id="view-quiz" class="tab-enter" style="display:none;">
+                    <div class="doc-title"><div class="doc-title-text">AI 매뉴얼 이해도 테스트</div></div>
+                    <div class="content-card">
+                        <div id="quiz-admin-config" style="display:none; margin-bottom:20px; background:rgba(56,189,248,0.1); padding:14px; border-radius:12px; border:1px solid #38bdf8;">
+                            <h4 style="color:#38bdf8; margin-bottom:8px;">⚙️ [어드민] 퀴즈 설정</h4>
+                            <div style="display:flex; gap:10px;">
+                                <select id="quiz-difficulty" style="margin:0;">
+                                    <option value="easy">난이도: 쉬움</option>
+                                    <option value="medium" selected>난이도: 보통</option>
+                                    <option value="hard">난이도: 어려움</option>
+                                </select>
+                                <input type="number" id="quiz-count" value="3" min="1" max="10" placeholder="문제 수" style="margin:0; width:100px;">
+                                <button onclick="saveQuizConfig()" class="btn-ui" style="flex-shrink:0;">설정 저장</button>
+                            </div>
+                        </div>
+
+                        <button onclick="generateQuiz()" class="btn-ui" style="width:100%; margin-bottom:20px;">🤖 현재 매뉴얼 기반 AI 문제 생성하기</button>
+                        <div id="quiz-container"></div>
+                    </div>
+                </div>
+
                 <div id="view-admin-m-manage" class="tab-enter" style="display:none;">
-                    <div class="doc-title">매뉴얼 신규 등록 및 작성</div>
+                    <div class="doc-title"><div class="doc-title-text">매뉴얼 신규 등록 및 작성</div></div>
                     <div class="content-card" id="manual-edit-card">
                         <div style="margin-bottom:12px;">
                             <label style="font-size:12px; color:#00ffaa; font-family:'Pretendard'; font-weight:bold; display:block; margin-bottom:4px;">수정할 매뉴얼 선택</label>
@@ -446,6 +521,19 @@ MAIN_HTML_TEMPLATE = """
                                 <option value="-1">-- 새 매뉴얼 작성 --</option>
                             </select>
                         </div>
+
+                        <!-- 서식 확장 도구 모음 -->
+                        <div class="editor-toolbar">
+                            <button onclick="insertTag('<img>', '이미지 URL', 'https://via.placeholder.com/400x200')">📷 이미지 추가</button>
+                            <button onclick="insertYoutubeEmbed()">▶️ 유튜브 링크 삽입</button>
+                            <button onclick="insertTag('<mark>', '형광펜 텍스트', '강조할 내용', '</mark>')">🖍️ 형광펜</button>
+                            <button onclick="insertTag('<span style=\\'color:#ff2d55;\\'>', '색상 텍스트', '빨간색 글자', '</span>')">🎨 글자 색상</button>
+                            <button onclick="insertTag('<span style=\\'font-size:20px; font-weight:bold;\\'>', '큰 글자', '큰 글씨', '</span>')">🔍 글자 크기</button>
+                            <button onclick="insertTag('<hr/>')">➖ 구분선</button>
+                            <button onclick="insertTag('<fieldset style=\\'border:1px solid #00ffaa; padding:10px; border-radius:8px;\\'><legend style=\\'color:#00ffaa;\\'>도형 타이틀</legend>', '박스 내 내용', '도형 상자 안의 설명', '</fieldset>')">🔲 도형 박스</button>
+                            <button onclick="insertInteractiveBubble()">💬 상호작용 말풍선</button>
+                        </div>
+
                         <div style="display:flex; gap:10px; margin-bottom:4px;">
                             <input type="text" id="m-edit-category" placeholder="주제(카테고리) 예: 운항 지침, 공통 매뉴얼" style="flex:2;">
                             <label style="display:flex; align-items:center; gap:6px; font-family:'Pretendard'; font-size:13px; color:#00ffaa; cursor:pointer; padding-bottom:12px;">
@@ -453,7 +541,7 @@ MAIN_HTML_TEMPLATE = """
                             </label>
                         </div>
                         <input type="text" id="m-edit-title" placeholder="매뉴얼 제목을 입력하세요">
-                        <textarea id="m-edit-content" style="height:220px;" placeholder="매뉴얼 상세 내용을 입력하세요"></textarea>
+                        <textarea id="m-edit-content" style="height:220px;" placeholder="매뉴얼 상세 내용을 입력하세요 (HTML 서식 및 유튜브 URL 지원)"></textarea>
                         
                         <div style="display:flex; gap:10px;">
                             <button onclick="saveManualData()" class="btn-ui" style="flex:1;">💾 매뉴얼 저장/수정</button>
@@ -465,7 +553,7 @@ MAIN_HTML_TEMPLATE = """
                 </div>
 
                 <div id="view-admin-permissions" class="tab-enter" style="display:none;">
-                    <div class="doc-title">스태프 접근 권한 관리</div>
+                    <div class="doc-title"><div class="doc-title-text">스태프 접근 권한 관리</div></div>
                     
                     <div class="content-card" style="margin-bottom:20px;">
                         <div style="position:relative;">
@@ -534,7 +622,7 @@ MAIN_HTML_TEMPLATE = """
                 </div>
 
                 <div id="view-admin-logs" class="tab-enter" style="display:none;">
-                    <div class="doc-title">실시간 활동 로그</div>
+                    <div class="doc-title"><div class="doc-title-text">실시간 활동 로그</div></div>
                     <div class="content-card">
                         <div id="admin-log-box" style="background:var(--input-bg); padding:16px; border-radius:12px; font-family:monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(125,125,125,0.2);"></div>
                     </div>
@@ -550,10 +638,19 @@ MAIN_HTML_TEMPLATE = """
         function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
         window.addEventListener('resize', resize); resize();
 
-        let currentMode = localStorage.getItem('sky_theme_mode') || 'night';
+        let savedTheme = localStorage.getItem('sky_theme_mode');
+        let currentMode;
+
+        if (savedTheme) {
+            currentMode = savedTheme;
+        } else {
+            const currentHour = new Date().getHours();
+            currentMode = (currentHour >= 6 && currentHour < 18) ? 'day' : 'night';
+        }
+
         let progress = currentMode === 'day' ? 1.0 : 0.0;
         let targetProgress = progress;
-        let isSetting = currentMode === 'night'; // 해가 뜨는지 지는지 판별 변수 추가
+        let isSetting = currentMode === 'night';
 
         applyThemeUI(currentMode);
 
@@ -561,11 +658,11 @@ MAIN_HTML_TEMPLATE = """
             if (targetProgress === 0) {
                 targetProgress = 1.0;
                 currentMode = 'day';
-                isSetting = false; // 낮으로 전환 (해가 왼쪽에서 중앙으로 뜸)
+                isSetting = false;
             } else {
                 targetProgress = 0.0;
                 currentMode = 'night';
-                isSetting = true; // 밤으로 전환 (해가 중앙에서 오른쪽으로 짐)
+                isSetting = true;
             }
             localStorage.setItem('sky_theme_mode', currentMode);
             applyThemeUI(currentMode);
@@ -609,19 +706,16 @@ MAIN_HTML_TEMPLATE = """
 
         let tick = 0;
 
-        // 욱일기 형태를 제거하고 나른한 오후 창문 햇빛(Volumetric light) 스타일로 수정
         function drawSunRays(sunX, sunY, opacity, sunsetGlow) {
             if (opacity <= 0) return;
             ctx.save();
             ctx.translate(sunX, sunY);
             
             const rayLength = Math.max(canvas.width, canvas.height) * 1.5;
-            // 360도가 아닌 창문을 뚫고 비스듬히 떨어지는 각도 지정
             const baseAngles = [Math.PI/3.5, Math.PI/2.5, Math.PI/1.8, Math.PI/1.2]; 
-            const widths = [0.18, 0.08, 0.22, 0.12]; // 굵기를 불규칙하게 조절
+            const widths = [0.18, 0.08, 0.22, 0.12];
 
             for (let i = 0; i < baseAngles.length; i++) {
-                // tick을 활용해 나른하게 살랑이는 빛줄기 연출
                 const angle = baseAngles[i] + Math.sin(tick * 0.15 + i) * 0.08;
                 const width = widths[i] + Math.cos(tick * 0.1 + i) * 0.04;
 
@@ -632,7 +726,6 @@ MAIN_HTML_TEMPLATE = """
                 
                 const rayGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, rayLength);
                 
-                // 노을이 질 때 빛줄기도 붉게 물들도록 색상 동적 계산
                 const r = 255;
                 const g = 250 - sunsetGlow * 80;
                 const b = 224 - sunsetGlow * 150;
@@ -665,9 +758,8 @@ MAIN_HTML_TEMPLATE = """
         }
 
         function animate() {
-            progress += (targetProgress - progress) * 0.02; // 부드러운 전환을 위해 속도 미세 조정
+            progress += (targetProgress - progress) * 0.02;
 
-            // 노을(주황빛) 강도 계산: 전환되는 중간 시점(progress 0.5 부근)에 가장 진하게 연출
             const sunsetOpacity = Math.max(0, 1 - Math.abs(progress - 0.5) * 2.2);
 
             const skyTop = interpolateColor('#030509', '#38bdf8', progress);
@@ -679,7 +771,6 @@ MAIN_HTML_TEMPLATE = """
             ctx.fillStyle = bgGrad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 들어오고 나갈 때 뜨는 주황빛 노을 그라데이션 레이어 합성
             if (sunsetOpacity > 0.01) {
                 const sunsetLayer = ctx.createLinearGradient(0, 0, 0, canvas.height);
                 sunsetLayer.addColorStop(0, `rgba(255, 100, 50, ${sunsetOpacity * 0.4})`);
@@ -687,7 +778,7 @@ MAIN_HTML_TEMPLATE = """
                 sunsetLayer.addColorStop(1, `rgba(255, 180, 80, ${sunsetOpacity * 0.8})`);
                 
                 ctx.save();
-                ctx.globalCompositeOperation = 'color-dodge'; // 하늘색과 자연스럽게 주황빛 혼합
+                ctx.globalCompositeOperation = 'color-dodge';
                 ctx.fillStyle = sunsetLayer;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.restore();
@@ -712,7 +803,6 @@ MAIN_HTML_TEMPLATE = """
             drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraOpacity);
 
             if (progress > 0.01) {
-                // 해 위치: isSetting이 false(뜨는 중)면 왼쪽에서 중앙으로, true(지는 중)면 중앙에서 오른쪽으로
                 let sunX;
                 if (!isSetting) {
                     sunX = canvas.width * 0.1 + progress * (canvas.width * 0.4); 
@@ -720,10 +810,8 @@ MAIN_HTML_TEMPLATE = """
                     sunX = canvas.width * 0.9 - progress * (canvas.width * 0.4);
                 }
                 
-                // 포물선 형태의 궤적을 그리며 뜸/짐
                 const sunY = canvas.height * 1.1 - Math.sin(progress * Math.PI / 2) * (canvas.height * 0.85);
 
-                // 햇빛 색상: 낮에는 하얗고 노을 질 때는 붉게 변함
                 const r = 255;
                 const g = 245 - sunsetOpacity * 100;
                 const b = 180 - sunsetOpacity * 180;
@@ -753,10 +841,39 @@ MAIN_HTML_TEMPLATE = """
         }
         animate();
 
-        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [] };
+        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [], quiz_config: {difficulty:'medium', count:3} };
         let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
+
+        // 미리보기 토글 상태 관리
+        let embedPreviewEnabled = localStorage.getItem('sky_embed_preview') !== 'false';
+
+        function toggleEmbedPreview(enabled) {
+            embedPreviewEnabled = enabled;
+            localStorage.setItem('sky_embed_preview', enabled);
+            renderCategorizedSidebar();
+        }
+
+        // 유튜브 링크 처리 및 임베드 변환 헬퍼 함수
+        function processYoutubeEmbeds(content, enablePreview) {
+            if (!content) return '';
+            
+            const ytRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[^\s<]*)?/g;
+
+            if (enablePreview) {
+                return content.replace(ytRegex, function(match, videoId) {
+                    return `<div class="video-embed-box">
+                        <iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>
+                    </div>`;
+                });
+            } else {
+                return content.replace(ytRegex, function(match, videoId) {
+                    const fullUrl = match.startsWith('http') ? match : `https://${match}`;
+                    return `<a href="${fullUrl}" target="_blank" style="color:#00ffaa; text-decoration:underline;">🔗 유튜브 동영상 보기 (${fullUrl})</a>`;
+                });
+            }
+        }
 
         async function syncSystemState() {
             try {
@@ -830,15 +947,25 @@ MAIN_HTML_TEMPLATE = """
             document.getElementById('user-avatar').src = avatarUrl;
             document.getElementById('user-name').innerText = `${data.user.global_name || data.user.username}`;
 
+            const embedToggle = document.getElementById('embed-preview-toggle');
+            if (embedToggle) embedToggle.checked = embedPreviewEnabled;
+
             const roleBadge = document.getElementById('user-role-badge');
             if (data.role === 'admin') {
                 roleBadge.innerText = 'ADMIN';
                 roleBadge.className = 'badge-admin';
                 document.getElementById('admin-menu-section').style.display = 'block';
+                document.getElementById('quiz-admin-config').style.display = 'block';
+                
+                if (data.quiz_config) {
+                    document.getElementById('quiz-difficulty').value = data.quiz_config.difficulty || 'medium';
+                    document.getElementById('quiz-count').value = data.quiz_config.count || 3;
+                }
             } else {
                 roleBadge.innerText = 'STAFF';
                 roleBadge.className = 'badge-staff';
                 document.getElementById('admin-menu-section').style.display = 'none';
+                document.getElementById('quiz-admin-config').style.display = 'none';
             }
 
             renderCategorizedSidebar();
@@ -890,7 +1017,10 @@ MAIN_HTML_TEMPLATE = """
             if (appState.manuals.length > 0) {
                 const current = appState.manuals[selectedManualIndex] || appState.manuals[0];
                 document.getElementById('doc-title').innerText = `${current.pinned ? '📌 ' : ''}${current.title}`;
-                document.getElementById('doc-body').innerText = current.content;
+                
+                // 유튜브 및 미디어 링크 미리보기 변환 로직 적용
+                const processedContent = processYoutubeEmbeds(current.content, embedPreviewEnabled);
+                document.getElementById('doc-body').innerHTML = processedContent;
             }
         }
 
@@ -909,6 +1039,69 @@ MAIN_HTML_TEMPLATE = """
                     document.getElementById('m-edit-content').value = current.content || '';
                 }
             }
+        }
+
+        function insertTag(openTag, placeholder = "", defaultText = "", closeTag = "") {
+            const textarea = document.getElementById('m-edit-content');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const selectedText = textarea.value.substring(start, end) || defaultText;
+            
+            let inserted = "";
+            if (openTag === '<img>') {
+                const url = prompt("이미지 URL을 입력하세요:", defaultText);
+                if (url) inserted = `<img src="${url}" style="max-width:100%; border-radius:10px; margin:10px 0;"/>`;
+            } else {
+                inserted = `${openTag}${selectedText}${closeTag}`;
+            }
+
+            textarea.value = textarea.value.substring(0, start) + inserted + textarea.value.substring(end);
+            textarea.focus();
+        }
+
+        function insertYoutubeEmbed() {
+            const url = prompt("유튜브 동영상 링크(URL)를 입력하세요:", "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+            if (url) {
+                const textarea = document.getElementById('m-edit-content');
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                textarea.value = textarea.value.substring(0, start) + `\n${url.trim()}\n` + textarea.value.substring(end);
+                textarea.focus();
+            }
+        }
+
+        function insertInteractiveBubble() {
+            const msg = prompt("말풍선에 표시할 메시지를 입력하세요:", "이 버튼을 클릭하여 실행되었습니다!");
+            if(!msg) return;
+            const btnText = prompt("버튼 텍스트를 입력하세요:", "상호작용 테스트");
+            
+            const htmlSnippet = `
+<div style="margin:15px 0; position:relative; display:inline-block;">
+    <button class="btn-ui" onclick="showBubblePop(this, '${msg}')">${btnText || '상호작용 테스트'}</button>
+</div>
+<div class="key-display">
+    <span>실제 키보드를 눌러보세요:</span>
+    <div id="active-key-cap" class="key-cap">KEY</div>
+</div>
+`;
+            insertTag(htmlSnippet);
+        }
+
+        function showBubblePop(btnEl, text) {
+            const existing = document.getElementById('active-speech-pop');
+            if (existing) existing.remove();
+
+            const pop = document.createElement('div');
+            pop.id = 'active-speech-pop';
+            pop.className = 'speech-bubble-pop';
+            pop.innerText = text;
+
+            const rect = btnEl.getBoundingClientRect();
+            pop.style.top = (rect.top - 45) + 'px';
+            pop.style.left = rect.left + 'px';
+
+            document.body.appendChild(pop);
+            setTimeout(() => { if (pop) pop.remove(); }, 3000);
         }
 
         function onManualSelectToEdit(val) {
@@ -959,6 +1152,75 @@ MAIN_HTML_TEMPLATE = """
             if (navEl) navEl.classList.add('active');
             
             transitionToTab(`view-admin-${tabName}`);
+        }
+
+        async function generateQuiz() {
+            const container = document.getElementById('quiz-container');
+            container.innerHTML = '<div style="text-align:center; padding:20px; color:#00ffaa;">🤖 AI가 매뉴얼을 분석하여 퀴즈를 생성하고 있습니다...</div>';
+
+            const res = await fetch('/api/quiz/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ manual_index: selectedManualIndex })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                renderQuiz(data.questions);
+            } else {
+                container.innerHTML = '<div style="color:#ff2d55; padding:10px;">퀴즈 생성에 실패했습니다. (OpenAI API 키 설정 확인 필요)</div>';
+            }
+        }
+
+        function renderQuiz(questions) {
+            const container = document.getElementById('quiz-container');
+            if (!questions || questions.length === 0) {
+                container.innerHTML = '<div>생성된 문제가 없습니다.</div>';
+                return;
+            }
+
+            container.innerHTML = questions.map((q, qIdx) => `
+                <div style="background:rgba(0,0,0,0.2); padding:16px; border-radius:12px; margin-bottom:16px; border:1px solid rgba(125,125,125,0.2);">
+                    <div style="font-weight:bold; margin-bottom:10px; color:var(--text-main);">Q${qIdx+1}. ${q.question}</div>
+                    <div>
+                        ${q.options.map((opt, oIdx) => `
+                            <label style="display:block; padding:8px 12px; background:var(--btn-item-bg); margin-bottom:6px; border-radius:8px; cursor:pointer;">
+                                <input type="radio" name="q_${qIdx}" value="${oIdx}" style="width:auto; margin-right:8px;"> ${opt}
+                            </label>
+                        `).join('')}
+                    </div>
+                    <button class="btn-ui btn-secondary" style="margin-top:8px; padding:4px 10px; font-size:12px;" onclick="checkAnswer(${qIdx}, ${q.answer_index}, '${q.explanation}')">정답 확인</button>
+                    <div id="quiz-result-${qIdx}" style="margin-top:8px; font-size:13px;"></div>
+                </div>
+            `).join('');
+        }
+
+        function checkAnswer(qIdx, correctIdx, explanation) {
+            const selected = document.querySelector(`input[name="q_${qIdx}"]:checked`);
+            const resDiv = document.getElementById(`quiz-result-${qIdx}`);
+            if (!selected) return showNotification("답을 선택해주세요!");
+
+            if (parseInt(selected.value) === correctIdx) {
+                resDiv.innerHTML = `<span style="color:#4ade80; font-weight:bold;">⭕ 정답입니다!</span><br/><span style="color:var(--text-sub);">${explanation}</span>`;
+            } else {
+                resDiv.innerHTML = `<span style="color:#f87171; font-weight:bold;">❌ 오답입니다.</span><br/><span style="color:var(--text-sub);">${explanation}</span>`;
+            }
+        }
+
+        async function saveQuizConfig() {
+            const difficulty = document.getElementById('quiz-difficulty').value;
+            const count = parseInt(document.getElementById('quiz-count').value);
+
+            const res = await fetch('/api/admin/quiz_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ difficulty, count })
+            });
+
+            if (res.ok) {
+                showNotification("퀴즈 설정이 저장되었습니다.");
+                syncSystemState();
+            }
         }
 
         function maskId(idStr) {
@@ -1280,6 +1542,7 @@ def get_state():
         "user": user,
         "role": role,
         "manuals": data.get("manuals", []),
+        "quiz_config": data.get("quiz_config", {"difficulty": "medium", "count": 3}),
         "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
         "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
         "admin_whitelist": data.get("admin_whitelist", []) if role == "admin" else [],
@@ -1467,6 +1730,97 @@ def admin_permission_batch():
     add_log(data, "일괄 권한 변경", user_name, f"유저 {len(user_ids)}명에 대해 '{action}' 처리 수행")
     save_data(data)
     return jsonify({"status": "success"})
+
+@app.route("/api/admin/quiz_config", methods=["POST"])
+def admin_quiz_config():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
+
+    req_data = request.json or {}
+    difficulty = req_data.get("difficulty", "medium")
+    count = req_data.get("count", 3)
+
+    data["quiz_config"] = {
+        "difficulty": difficulty,
+        "count": count
+    }
+    
+    user_name = user.get("global_name") or user.get("username")
+    add_log(data, "퀴즈 설정", user_name, f"퀴즈 설정 변경 (난이도: {difficulty}, 문제수: {count})")
+    save_data(data)
+    return jsonify({"status": "success"})
+
+@app.route("/api/quiz/generate", methods=["POST"])
+def generate_quiz():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    req_data = request.json or {}
+    manual_idx = req_data.get("manual_index", 0)
+
+    manuals = data.get("manuals", [])
+    if manual_idx >= len(manuals):
+        manual_idx = 0
+
+    target_manual = manuals[manual_idx] if manuals else {"title": "기본", "content": "내용 없음"}
+    quiz_config = data.get("quiz_config", {"difficulty": "medium", "count": 3})
+
+    if not OPENAI_API_KEY:
+        return jsonify({
+            "questions": [
+                {
+                    "question": f"[{target_manual.get('title')}] 본 매뉴얼의 핵심 지침으로 올바른 것은 무엇입니까?",
+                    "options": ["외부 유출 허용", "무단 캡처 금지 및 보안 유지", "계정 공유 권장", "로그 기록 비활성화"],
+                    "answer_index": 1,
+                    "explanation": "매뉴얼 지침에 따라 시스템 정보 유출 및 무단 캡처는 엄격히 금지됩니다."
+                }
+            ]
+        })
+
+    try:
+        prompt = f"""
+다음 매뉴얼 내용을 바탕으로 {quiz_config['count']}개의 객관식 퀴즈 문제를 생성하세요.
+난이도: {quiz_config['difficulty']}
+
+[매뉴얼 제목]: {target_manual.get('title')}
+[매뉴얼 내용]: {target_manual.get('content')}
+
+반드시 JSON 형식을 지켜서 응답하세요:
+{{
+  "questions": [
+    {{
+      "question": "질문 내용",
+      "options": ["보기1", "보기2", "보기3", "보기4"],
+      "answer_index": 0,
+      "explanation": "해설 내용"
+    }}
+  ]
+}}
+"""
+        res = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"}
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            result_json = json.loads(res.json()['choices'][0]['message']['content'])
+            return jsonify(result_json)
+        else:
+            return jsonify({"error": "AI API 호출 실패"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
