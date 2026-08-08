@@ -1,9 +1,9 @@
-import os
-import json
 import base64
 import datetime
+import json
+import os
 import random
-from flask import Flask, request, render_template_string, redirect, session, jsonify
+from flask import Flask, jsonify, redirect, render_template_string, request, session
 import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -15,7 +15,9 @@ app.secret_key = os.urandom(24)
 # ⚙️ 설정 및 환경 변수
 # ==========================================
 CLIENT_ID = "1534184089144266872"
-CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm")
+CLIENT_SECRET = os.environ.get(
+    "DISCORD_CLIENT_SECRET", "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm"
+)
 BASE_URL = "https://sky-aurora-staff.onrender.com"
 
 ADMIN_SECRET_KEY = "sky_aurora_admin_secret_key_1234"
@@ -26,90 +28,107 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
+
 # --------------------------------------------------
 # 📁 데이터 불러오기 및 영구 저장 로직
 # --------------------------------------------------
 def load_data():
-    if GITHUB_TOKEN and GITHUB_REPO:
-        try:
-            url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
-            headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                content = res.json()["content"]
-                decoded_data = base64.b64decode(content).decode('utf-8')
-                data = json.loads(decoded_data)
-                for admin_id in DEFAULT_ADMINS:
-                    if admin_id not in data.get("admin_whitelist", []):
-                        data.setdefault("admin_whitelist", []).append(admin_id)
-                return data
-        except Exception as e:
-            print(f"[GitHub Sync Load Error] {e}")
+  if GITHUB_TOKEN and GITHUB_REPO:
+    try:
+      url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
+      headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+      res = requests.get(url, headers=headers, timeout=5)
+      if res.status_code == 200:
+        content = res.json()["content"]
+        decoded_data = base64.b64decode(content).decode("utf-8")
+        data = json.loads(decoded_data)
+        for admin_id in DEFAULT_ADMINS:
+          if admin_id not in data.get("admin_whitelist", []):
+            data.setdefault("admin_whitelist", []).append(admin_id)
+        return data
+    except Exception as e:
+      print(f"[GitHub Sync Load Error] {e}")
 
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                for admin_id in DEFAULT_ADMINS:
-                    if admin_id not in data.get("admin_whitelist", []):
-                        data.setdefault("admin_whitelist", []).append(admin_id)
-                return data
-        except Exception:
-            pass
+  if os.path.exists(DATA_FILE):
+    try:
+      with open(DATA_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        for admin_id in DEFAULT_ADMINS:
+          if admin_id not in data.get("admin_whitelist", []):
+            data.setdefault("admin_whitelist", []).append(admin_id)
+        return data
+    except Exception:
+      pass
 
-    return {
-        "admin_whitelist": DEFAULT_ADMINS,
-        "user_whitelist": [],
-        "user_blacklist": [],
-        "user_profiles": {},
-        "quiz_config": {
-            "difficulty": "medium",
-            "count": 3
-        },
-        "manuals": [
-            {
-                "id": 1,
-                "category": "보안 지침",
-                "pinned": True,
-                "title": "01. 기본 보안 규칙",
-                "content": "<h2 style='color:#00ffaa;'>기본 보안 가이드라인</h2><p>본 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히 금지됩니다.</p><hr/><p><mark style='background-color:#fef08a; color:#000; padding:2px 6px; border-radius:4px;'>📌 필수 유의사항</mark></p><p>1. 화면 캡처 금지<br/>2. 계정 공유 금지<br/>3. 실시간 접속 기록 로깅 중</p><p>참고 영상: https://www.youtube.com/watch?v=dQw4w9WgXcQ</p>"
-            }
-        ],
-        "logs": []
-    }
+  return {
+      "admin_whitelist": DEFAULT_ADMINS,
+      "user_whitelist": [],
+      "user_blacklist": [],
+      "user_profiles": {},
+      "quiz_config": {"difficulty": "medium", "count": 3},
+      "manuals": [
+          {
+              "id": 1,
+              "category": "보안 지침",
+              "pinned": True,
+              "title": "01. 기본 보안 규칙",
+              "content": (
+                  "<h2 style='color:#00ffaa;'>기본 보안 가이드라인</h2><p>본"
+                  " 매뉴얼 시스템에 포함된 모든 정보는 외부 유출이 엄격히"
+                  " 금지됩니다.</p><hr/><p><mark"
+                  " style='background-color:#fef08a; color:#000; padding:2px"
+                  " 6px; border-radius:4px;'>📌 필수 유의사항</mark></p><p>1."
+                  " 화면 캡처 금지<br/>2. 계정 공유 금지<br/>3. 실시간 접속 기록"
+                  " 로깅 중</p><p>참고 영상:"
+                  " https://www.youtube.com/watch?v=dQw4w9WgXcQ</p>"
+              ),
+          }
+      ],
+      "logs": [],
+  }
+
 
 def save_data(data):
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+  with open(DATA_FILE, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
 
-    if GITHUB_TOKEN and GITHUB_REPO:
-        try:
-            url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
-            headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-            get_res = requests.get(url, headers=headers, timeout=5)
-            sha = get_res.json().get("sha") if get_res.status_code == 200 else None
-            
-            json_str = json.dumps(data, ensure_ascii=False, indent=2)
-            encoded_content = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
-            
-            now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
-            payload = {
-                "message": f"Auto-sync manual data [{now_kst} KST]",
-                "content": encoded_content
-            }
-            if sha:
-                payload["sha"] = sha
-                
-            requests.put(url, headers=headers, json=payload, timeout=5)
-        except Exception as e:
-            print(f"[GitHub Sync Save Error] {e}")
+  if GITHUB_TOKEN and GITHUB_REPO:
+    try:
+      url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{DATA_FILE}"
+      headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+      get_res = requests.get(url, headers=headers, timeout=5)
+      sha = get_res.json().get("sha") if get_res.status_code == 200 else None
+
+      json_str = json.dumps(data, ensure_ascii=False, indent=2)
+      encoded_content = base64.b64encode(json_str.encode("utf-8")).decode(
+          "utf-8"
+      )
+
+      # KST 시간 기준 저장 로깅
+      now_kst = (
+          datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+      ).strftime("%Y-%m-%d %H:%M:%S")
+      payload = {
+          "message": f"Auto-sync manual data [{now_kst} KST]",
+          "content": encoded_content,
+      }
+      if sha:
+        payload["sha"] = sha
+
+      requests.put(url, headers=headers, json=payload, timeout=5)
+    except Exception as e:
+      print(f"[GitHub Sync Save Error] {e}")
+
 
 def add_log(data, category, user_name, action, device_type="PC"):
-    now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{now_kst} KST] [{category}] [{device_type}] {user_name}: {action}"
-    if "logs" not in data:
-        data["logs"] = []
-    data["logs"].insert(0, log_entry)
+  now_kst = (
+      datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+  ).strftime("%Y-%m-%d %H:%M:%S")
+  log_entry = f"[{now_kst} KST] [{category}] [{device_type}] {user_name}: {action}"
+  if "logs" not in data:
+    data["logs"] = []
+  data["logs"].insert(0, log_entry)
+
 
 # --------------------------------------------------
 # 🎨 프론트엔드 UI/UX
@@ -121,10 +140,13 @@ MAIN_HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>SKY AURORA STAFF MANUAL</title>
-    <!-- Pretendard & Orbitron 폰트 탑재 -->
-    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
     <style>
+        @font-face {
+            font-family: 'GmarketSansBold';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/GmarketSansBold.woff') format('woff');
+            font-weight: normal; font-style: normal;
+        }
         * {
             box-sizing: border-box; margin: 0; padding: 0;
             -webkit-user-select: none !important; -moz-user-select: none !important; -ms-user-select: none !important; user-select: none !important;
@@ -133,50 +155,38 @@ MAIN_HTML_TEMPLATE = """
         
         :root {
             --bg-body: #030509;
-            --container-bg: rgba(8, 12, 24, 0.65);
+            --container-bg: rgba(8, 12, 24, 0.85);
             --container-border: rgba(0, 255, 200, 0.25);
             --text-main: #ffffff;
             --text-sub: #cbd5e1;
-            --header-bg: rgba(5, 8, 18, 0.75);
-            --sidebar-bg: rgba(0, 0, 0, 0.3);
-            --card-bg: rgba(8, 14, 28, 0.55);
-            --input-bg: rgba(3, 5, 9, 0.7);
-            --btn-item-bg: rgba(10, 16, 32, 0.75);
+            --header-bg: rgba(5, 8, 18, 0.95);
+            --sidebar-bg: rgba(0, 0, 0, 0.4);
+            --card-bg: rgba(5, 8, 17, 0.7);
+            --input-bg: rgba(3, 5, 9, 0.8);
+            --btn-item-bg: rgba(10, 16, 32, 0.95);
             --intro-bg: #030509;
             --intro-border: #00ffaa;
             --intro-text: #ffffff;
-
-            /* 2026 플립 디스플레이 테마 변수 (나이트) */
-            --flip-bg: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9));
-            --flip-text: #00ffaa;
-            --flip-border: rgba(0, 255, 170, 0.3);
-            --flip-shadow: 0 0 15px rgba(0, 255, 170, 0.25);
         }
 
         body.day-theme {
             --bg-body: #e0f2fe;
-            --container-bg: rgba(255, 255, 255, 0.65);
+            --container-bg: rgba(255, 255, 255, 0.85);
             --container-border: rgba(56, 189, 248, 0.4);
             --text-main: #0f172a;
             --text-sub: #334155;
-            --header-bg: rgba(241, 245, 249, 0.8);
-            --sidebar-bg: rgba(255, 255, 255, 0.35);
-            --card-bg: rgba(255, 255, 255, 0.6);
-            --input-bg: rgba(255, 255, 255, 0.85);
-            --btn-item-bg: rgba(241, 245, 249, 0.85);
+            --header-bg: rgba(241, 245, 249, 0.95);
+            --sidebar-bg: rgba(255, 255, 255, 0.5);
+            --card-bg: rgba(255, 255, 255, 0.75);
+            --input-bg: rgba(255, 255, 255, 0.9);
+            --btn-item-bg: rgba(241, 245, 249, 0.95);
             --intro-bg: #f0f9ff;
             --intro-border: #0284c7;
             --intro-text: #0f172a;
-
-            /* 2026 플립 디스플레이 테마 변수 (데이) */
-            --flip-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(241, 245, 249, 0.95));
-            --flip-text: #1e293b;
-            --flip-border: rgba(56, 189, 248, 0.4);
-            --flip-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
         }
 
         body {
-            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            font-family: 'Pretendard', sans-serif;
             background: var(--bg-body); color: var(--text-main); overflow: hidden; height: 100vh; width: 100vw;
             display: flex; justify-content: center; align-items: center; transition: background 0.5s ease, color 0.5s ease;
         }
@@ -187,15 +197,15 @@ MAIN_HTML_TEMPLATE = """
         }
         .alert-icon { font-size: 80px; color: #ff2d55; margin-bottom: 20px; animation: pulse 1.2s infinite ease-in-out; }
         .alert-main-text { font-size: 24px; font-weight: bold; color: #ff2d55; margin-bottom: 12px; }
-        .alert-sub-text { font-size: 14px; color: #a0aec0; }
+        .alert-sub-text { font-size: 14px; color: #a0aec0; font-family: 'Pretendard', sans-serif; }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
         #custom-notification {
             position: fixed; top: 25px; right: 25px; z-index: 999999; display: flex; align-items: center; gap: 12px;
-            padding: 14px 22px; background: rgba(8, 15, 30, 0.85); backdrop-filter: blur(20px); border: 1px solid #00ffaa;
+            padding: 14px 22px; background: rgba(8, 15, 30, 0.95); border: 1px solid #00ffaa;
             border-radius: 14px; box-shadow: 0 0 20px rgba(0, 255, 170, 0.4); color: #fff;
             transform: translateX(150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            font-size: 14px; font-weight: 600;
+            font-family: 'Pretendard', sans-serif; font-size: 14px; font-weight: 600;
         }
         #custom-notification.show { transform: translateX(0); }
 
@@ -222,74 +232,74 @@ MAIN_HTML_TEMPLATE = """
             border: 2px solid var(--intro-border); box-shadow: 0 0 25px rgba(0,255,170,0.6); z-index: 2;
         }
         .intro-avatar.show { opacity: 1; transform: scale(1); }
-        .intro-progress-text { font-size: 28px; color: var(--intro-border); font-family: 'Orbitron', sans-serif; font-weight: 800; letter-spacing: 2px; }
-        .intro-welcome-text { font-size: 18px; color: var(--intro-text); font-weight: 600; margin-top: 16px; opacity: 0; transition: opacity 0.5s ease; text-align: center; padding: 0 20px; }
+        .intro-progress-text { font-size: 28px; color: var(--intro-border); font-family: 'GmarketSansBold'; letter-spacing: 1px; }
+        .intro-welcome-text { font-size: 18px; color: var(--intro-text); font-family: 'Pretendard'; font-weight: 600; margin-top: 16px; opacity: 0; transition: opacity 0.5s ease; text-align: center; padding: 0 20px; }
         .intro-welcome-text.show { opacity: 1; }
 
         #bg-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
 
-        /* Glassmorphism 메인 컨테이너 */
         .container {
             position: relative; z-index: 2; width: 94%; max-width: 1280px; height: 90vh;
-            background: var(--container-bg); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
-            border: 1px solid var(--container-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            background: var(--container-bg); backdrop-filter: blur(25px); border: 1px solid var(--container-border);
+            border-radius: 24px; box-shadow: 0 0 60px rgba(0, 255, 170, 0.12);
             display: flex; flex-direction: column; overflow: hidden; animation: containerAppear 0.8s ease;
             transition: background 0.5s ease, border-color 0.5s ease;
         }
         @keyframes containerAppear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-        header { padding: 16px 24px; background: var(--header-bg); backdrop-filter: blur(15px); border-bottom: 1px solid rgba(125, 125, 125, 0.15); display: flex; justify-content: space-between; align-items: center; transition: background 0.5s ease; }
-        header h1 { font-family: 'Orbitron', 'Pretendard', sans-serif; font-weight: 900; font-size: 20px; letter-spacing: 1px; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        header { padding: 16px 24px; background: var(--header-bg); border-bottom: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; transition: background 0.5s ease; backdrop-filter: blur(10px); }
+        header h1 { font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         
         .header-controls { display: flex; align-items: center; gap: 12px; }
         .theme-toggle-btn {
-            background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.25);
-            color: var(--text-main); font-size: 12px; font-weight: 700;
-            padding: 7px 16px; border-radius: 20px; cursor: pointer; transition: all 0.3s;
-            display: flex; align-items: center; gap: 6px; backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3);
+            color: var(--text-main); font-family: 'Pretendard'; font-size: 12px; font-weight: bold;
+            padding: 6px 14px; border-radius: 20px; cursor: pointer; transition: all 0.3s;
+            display: flex; align-items: center; gap: 6px; backdrop-filter: blur(5px);
         }
-        body.day-theme .theme-toggle-btn { background: rgba(0, 0, 0, 0.06); border-color: rgba(0, 0, 0, 0.15); }
-        .theme-toggle-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 255, 170, 0.2); }
+        body.day-theme .theme-toggle-btn { background: rgba(0, 0, 0, 0.08); border-color: rgba(0, 0, 0, 0.2); }
+        .theme-toggle-btn:hover { transform: scale(1.05); }
 
-        .badge-admin { background: rgba(255, 45, 85, 0.2); border: 1px solid #ff2d55; color: #ff2d55; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
-        .badge-staff { background: rgba(0, 255, 170, 0.2); border: 1px solid #00ffaa; color: #00ffaa; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
-        .avatar-img { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #00ffaa; }
-        .logout-btn { color: var(--text-sub); text-decoration: none; font-size: 12px; padding: 5px 12px; border: 1px solid rgba(125,125,125,0.3); border-radius: 8px; transition: all 0.2s; }
+        .badge-admin { background: rgba(255, 45, 85, 0.2); border: 1px solid #ff2d55; color: #ff2d55; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
+        .badge-staff { background: rgba(0, 255, 170, 0.2); border: 1px solid #00ffaa; color: #00ffaa; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
+        .avatar-img { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #00ffaa; object-fit: cover; }
+        .logout-btn { font-family: 'Pretendard', sans-serif; color: var(--text-sub); text-decoration: none; font-size: 12px; padding: 5px 12px; border: 1px solid rgba(125,125,125,0.3); border-radius: 8px; }
         .logout-btn:hover { color: var(--text-main); border-color: #00ffaa; background: rgba(0, 255, 170, 0.1); }
 
-        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; background: var(--card-bg); backdrop-filter: blur(20px); border: 1px solid var(--container-border); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); }
-        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
+        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid var(--container-border); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); }
+        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
         .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5); }
 
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         
-        .sidebar { width: 300px; background: var(--sidebar-bg); backdrop-filter: blur(15px); border-right: 1px solid rgba(125, 125, 125, 0.15); padding: 20px 14px; overflow-y: auto; transition: background 0.5s ease; }
-        .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1.5px; margin: 16px 0 8px 8px; text-transform: uppercase; font-weight: 800; }
+        .sidebar { width: 300px; background: var(--sidebar-bg); backdrop-filter: blur(15px); border-right: 1px solid rgba(125, 125, 125, 0.2); padding: 20px 14px; overflow-y: auto; transition: background 0.5s ease; }
+        .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1px; margin: 16px 0 8px 8px; text-transform: uppercase; font-family: 'Pretendard'; font-weight: bold; }
         body.day-theme .sidebar-category-title { color: #0284c7; }
         
-        .aurora-btn-wrapper { position: relative; margin-bottom: 8px; border-radius: 12px; overflow: hidden; padding: 1px; background: rgba(125, 125, 125, 0.08); transition: all 0.25s ease; }
-        .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); box-shadow: 0 0 15px rgba(0, 255, 170, 0.35); }
-        .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: var(--btn-item-bg); backdrop-filter: blur(10px); border: none; color: var(--text-sub); border-radius: 11px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
-        .aurora-btn-wrapper.active .item-btn { color: var(--text-main); font-weight: 700; }
+        .aurora-btn-wrapper { position: relative; margin-bottom: 8px; border-radius: 12px; overflow: hidden; padding: 2px; background: rgba(125, 125, 125, 0.05); transition: all 0.25s ease; }
+        .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); box-shadow: 0 0 15px rgba(0, 255, 170, 0.4); }
+        .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: var(--btn-item-bg); border: none; color: var(--text-sub); border-radius: 10px; cursor: pointer; font-size: 13px; font-family: 'Pretendard', sans-serif; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .aurora-btn-wrapper.active .item-btn { color: var(--text-main); font-weight: bold; }
         .pin-badge { font-size: 11px; margin-right: 4px; }
 
         .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; scroll-behavior: smooth; }
-        .content-card { background: var(--card-bg); backdrop-filter: blur(20px); border: 1px solid rgba(125, 125, 125, 0.15); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); position: relative; margin-bottom: 20px; transition: background 0.5s ease; }
+        .content-card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid rgba(125, 125, 125, 0.15); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: relative; margin-bottom: 20px; transition: background 0.5s ease; }
         
-        .doc-title { font-size: 20px; font-weight: 800; margin-bottom: 16px; color: var(--text-main); border-bottom: 1px solid rgba(125, 125, 125, 0.15); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        .doc-title { font-size: 20px; margin-bottom: 16px; color: var(--text-main); border-bottom: 1px solid rgba(125, 125, 125, 0.2); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
         .doc-title-text { display: flex; align-items: center; gap: 10px; }
         .doc-title-text::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
-        .doc-body { font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); background: rgba(0, 0, 0, 0.12); backdrop-filter: blur(10px); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
+        .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); background: rgba(0, 0, 0, 0.15); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
 
+        /* 동영상 미리보기 박스 스타일 */
         .video-embed-box { margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px; border: 1px solid rgba(0, 255, 170, 0.3); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
         .video-embed-box iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
 
-        input, textarea, select { width: 100%; background: var(--input-bg); backdrop-filter: blur(10px); color: var(--text-main); border: 1px solid rgba(125, 125, 125, 0.25); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; transition: all 0.2s; }
+        input, textarea, select { width: 100%; background: var(--input-bg); color: var(--text-main); border: 1px solid rgba(125, 125, 125, 0.3); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; backdrop-filter: blur(5px); }
         input:focus, textarea:focus, select:focus { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
 
         .btn-ui {
             position: relative; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none;
-            padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer;
+            padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif;
             transition: all 0.25s ease; outline: none; overflow: hidden;
         }
         .btn-ui::after {
@@ -297,38 +307,19 @@ MAIN_HTML_TEMPLATE = """
             background: radial-gradient(circle, rgba(0, 255, 170, 0.3) 0%, transparent 70%);
             opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
         }
-        .btn-ui:hover { transform: translateY(-2px); box-shadow: 0 0 15px rgba(0, 255, 170, 0.5); }
+        .btn-ui:hover { transform: translateY(-2px); box-shadow: 0 0 15px rgba(0, 255, 170, 0.5), 0 0 30px rgba(0, 242, 254, 0.3); }
         .btn-ui:hover::after { opacity: 1; }
         .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
         .btn-danger:hover { box-shadow: 0 0 15px rgba(255, 45, 85, 0.6); }
         .btn-secondary { background: linear-gradient(135deg, #475569, #334155); }
 
-        /* 2026 미래지향적 플립 디스플레이 스타일 (3D 회전 & 입체 반사) */
-        .flip-clock-container {
-            display: flex; gap: 12px; align-items: center; justify-content: center; margin: 20px 0; perspective: 1000px;
-        }
-        .flip-card {
-            position: relative; width: 64px; height: 80px; background: var(--flip-bg);
-            border: 1px solid var(--flip-border); border-radius: 12px;
-            box-shadow: var(--flip-shadow); transform-style: preserve-3d;
-            display: flex; justify-content: center; align-items: center;
-            font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 38px; color: var(--flip-text);
-            overflow: hidden; backdrop-filter: blur(15px); transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .flip-card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
-            background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%);
-            border-bottom: 1px solid rgba(0,0,0,0.15); pointer-events: none; z-index: 2;
-        }
-        .flip-card.flip-anim { transform: rotateX(-360deg); }
-
-        .editor-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; background: rgba(0,0,0,0.15); padding: 8px; border-radius: 10px; }
-        .editor-toolbar button { padding: 6px 10px; font-size: 12px; background: var(--btn-item-bg); color: var(--text-main); border: 1px solid rgba(125,125,125,0.2); border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .editor-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 10px; backdrop-filter: blur(5px); }
+        .editor-toolbar button { padding: 6px 10px; font-size: 12px; background: var(--btn-item-bg); color: var(--text-main); border: 1px solid rgba(125,125,125,0.3); border-radius: 6px; cursor: pointer; font-family: 'Pretendard'; }
         .editor-toolbar button:hover { border-color: #00ffaa; color: #00ffaa; }
 
         .speech-bubble-pop {
             position: absolute; background: #00ffaa; color: #030509; padding: 10px 16px; border-radius: 12px;
-            font-size: 13px; font-weight: bold; z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            font-size: 13px; font-weight: bold; font-family: 'Pretendard'; z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
             animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .speech-bubble-pop::after {
@@ -336,12 +327,12 @@ MAIN_HTML_TEMPLATE = """
         }
         @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-        .key-display { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-top: 10px; }
-        .key-cap { background: #334155; color: #fff; padding: 10px 16px; border-radius: 8px; border-bottom: 4px solid #1e293b; font-family: 'Orbitron', monospace; font-size: 18px; font-weight: 800; transition: all 0.1s; }
+        .key-display { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.3); border-radius: 12px; margin-top: 10px; backdrop-filter: blur(5px); }
+        .key-cap { background: #334155; color: #fff; padding: 10px 16px; border-radius: 8px; border-bottom: 4px solid #1e293b; font-family: monospace; font-size: 18px; font-weight: bold; }
         .key-cap.active { background: #00ffaa; color: #000; border-bottom-color: #00cc88; transform: translateY(2px); }
 
         ul.data-list { list-style: none; padding: 0; }
-        ul.data-list li { background: var(--btn-item-bg); backdrop-filter: blur(10px); padding: 14px; margin-bottom: 10px; border-radius: 12px; border: 1px solid rgba(125, 125, 125, 0.15); display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+        ul.data-list li { background: var(--btn-item-bg); padding: 14px; margin-bottom: 10px; border-radius: 12px; border: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
 
         .user-card-info { display: flex; align-items: center; gap: 12px; }
         .user-card-avatar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #00ffaa; object-fit: cover; }
@@ -354,7 +345,7 @@ MAIN_HTML_TEMPLATE = """
 
         .mention-dropdown {
             position: absolute; top: 45px; left: 0; right: 0; z-index: 1000;
-            background: var(--card-bg); backdrop-filter: blur(20px); border: 1px solid #00ffaa; border-radius: 12px;
+            background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid #00ffaa; border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); display: none; max-height: 180px; overflow-y: auto;
         }
         .mention-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; transition: background 0.2s; }
@@ -368,13 +359,12 @@ MAIN_HTML_TEMPLATE = """
         @media (max-width: 768px) {
             .container { width: 100%; height: 100vh; border-radius: 0; border: none; }
             .dashboard { flex-direction: column; }
-            .sidebar { width: 100%; height: 210px; border-right: none; border-bottom: 1px solid rgba(125,125,125,0.15); padding: 12px; }
+            .sidebar { width: 100%; height: 210px; border-right: none; border-bottom: 1px solid rgba(125,125,125,0.2); padding: 12px; }
             .main-content { padding: 16px; }
             header { padding: 12px 16px; }
-            header h1 { font-size: 16px; }
+            header h1 { font-size: 15px; }
             .doc-title { font-size: 17px; }
             .doc-body { font-size: 14px; padding: 14px; }
-            .flip-card { width: 48px; height: 60px; font-size: 28px; }
         }
     </style>
     <script>
@@ -471,14 +461,14 @@ MAIN_HTML_TEMPLATE = """
                 <div id="user-header-info" style="display:none; align-items:center; gap:12px;">
                     <span id="user-role-badge" class="badge-staff">STAFF</span>
                     <img id="user-avatar" src="" alt="Avatar" class="avatar-img" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                    <span id="user-name" style="font-size: 13px; color: #00ffaa; font-weight:600;"></span>
+                    <span id="user-name" style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard'; font-weight:600;"></span>
                     <a href="/logout" class="logout-btn">로그아웃</a>
                 </div>
             </div>
         </header>
 
         <div id="login-box" class="login-box">
-            <h2 style="font-size: 18px; margin-bottom: 24px; font-weight: 800;">🔒 스태프 시스템 인증</h2>
+            <h2 style="font-size: 18px; margin-bottom: 24px; font-family: 'Pretendard';">🔒 스태프 시스템 인증</h2>
             <button onclick="login()" class="discord-btn">
                 디스코드 계정으로 통합 로그인
             </button>
@@ -492,7 +482,7 @@ MAIN_HTML_TEMPLATE = """
                     <button class="item-btn" onclick="transitionToTab('view-quiz')">🧩 AI 매뉴얼 퀴즈</button>
                 </div>
 
-                <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(125,125,125,0.15); padding-top:10px;">
+                <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(125,125,125,0.2); padding-top:10px;">
                     <div class="sidebar-category-title" style="color:#38bdf8;">Admin Controls</div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-m-manage">
                         <button class="item-btn" onclick="switchAdminTab('m-manage')">📖 매뉴얼 등록/관리</button>
@@ -510,7 +500,7 @@ MAIN_HTML_TEMPLATE = """
                 <div id="view-manual" class="tab-enter" style="display:block;">
                     <div class="doc-title">
                         <div id="doc-title" class="doc-title-text">매뉴얼 선택 중...</div>
-                        <label style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:6px; cursor:pointer;">
+                        <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); display:flex; align-items:center; gap:6px; cursor:pointer;">
                             <input type="checkbox" id="embed-preview-toggle" onchange="toggleEmbedPreview(this.checked)" checked style="width:auto; margin:0;">
                             🎥 링크 미리보기 켜기
                         </label>
@@ -544,12 +534,13 @@ MAIN_HTML_TEMPLATE = """
                     <div class="doc-title"><div class="doc-title-text">매뉴얼 신규 등록 및 작성</div></div>
                     <div class="content-card" id="manual-edit-card">
                         <div style="margin-bottom:12px;">
-                            <label style="font-size:12px; color:#00ffaa; font-weight:bold; display:block; margin-bottom:4px;">수정할 매뉴얼 선택</label>
+                            <label style="font-size:12px; color:#00ffaa; font-family:'Pretendard'; font-weight:bold; display:block; margin-bottom:4px;">수정할 매뉴얼 선택</label>
                             <select id="m-select-edit" onchange="onManualSelectToEdit(this.value)">
                                 <option value="-1">-- 새 매뉴얼 작성 --</option>
                             </select>
                         </div>
 
+                        <!-- 서식 확장 도구 모음 -->
                         <div class="editor-toolbar">
                             <button onclick="insertTag('<img>', '이미지 URL', 'https://via.placeholder.com/400x200')">📷 이미지 추가</button>
                             <button onclick="insertYoutubeEmbed()">▶️ 유튜브 링크 삽입</button>
@@ -563,7 +554,7 @@ MAIN_HTML_TEMPLATE = """
 
                         <div style="display:flex; gap:10px; margin-bottom:4px;">
                             <input type="text" id="m-edit-category" placeholder="주제(카테고리) 예: 운항 지침, 공통 매뉴얼" style="flex:2;">
-                            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#00ffaa; cursor:pointer; padding-bottom:12px;">
+                            <label style="display:flex; align-items:center; gap:6px; font-family:'Pretendard'; font-size:13px; color:#00ffaa; cursor:pointer; padding-bottom:12px;">
                                 <input type="checkbox" id="m-edit-pinned" style="width:auto; margin:0;"> 📌 상단 고정
                             </label>
                         </div>
@@ -605,7 +596,7 @@ MAIN_HTML_TEMPLATE = """
                             </div>
 
                             <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
-                                <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#38bdf8; cursor:pointer;">
+                                <label style="display:flex; align-items:center; gap:6px; font-family:'Pretendard'; font-size:13px; color:#38bdf8; cursor:pointer;">
                                     <input type="checkbox" id="perm-is-admin" style="width:auto; margin:0;"> 👑 어드민 권한 부여
                                 </label>
                                 <div style="display:flex; gap:10px;">
@@ -630,7 +621,7 @@ MAIN_HTML_TEMPLATE = """
                         <div class="content-card">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                                 <h3 style="color:#4ade80; font-size:15px;">화이트리스트 목록</h3>
-                                <label style="font-size:12px; color:var(--text-sub); cursor:pointer;">
+                                <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); cursor:pointer;">
                                     <input type="checkbox" onclick="toggleSelectAll('wl-check', this.checked)" style="width:auto;"> 전체 선택
                                 </label>
                             </div>
@@ -639,7 +630,7 @@ MAIN_HTML_TEMPLATE = """
                         <div class="content-card">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                                 <h3 style="color:#f87171; font-size:15px;">블랙리스트 목록</h3>
-                                <label style="font-size:12px; color:var(--text-sub); cursor:pointer;">
+                                <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); cursor:pointer;">
                                     <input type="checkbox" onclick="toggleSelectAll('bl-check', this.checked)" style="width:auto;"> 전체 선택
                                 </label>
                             </div>
@@ -651,7 +642,7 @@ MAIN_HTML_TEMPLATE = """
                 <div id="view-admin-logs" class="tab-enter" style="display:none;">
                     <div class="doc-title"><div class="doc-title-text">실시간 활동 로그</div></div>
                     <div class="content-card">
-                        <div id="admin-log-box" style="background:var(--input-bg); backdrop-filter:blur(10px); padding:16px; border-radius:12px; font-family:'Orbitron', monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(125,125,125,0.2);"></div>
+                        <div id="admin-log-box" style="background:var(--input-bg); padding:16px; border-radius:12px; font-family:monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(125,125,125,0.2);"></div>
                     </div>
                 </div>
             </div>
@@ -677,6 +668,7 @@ MAIN_HTML_TEMPLATE = """
 
         let progress = currentMode === 'day' ? 1.0 : 0.0;
         let targetProgress = progress;
+        let isSetting = currentMode === 'night';
 
         applyThemeUI(currentMode);
 
@@ -684,9 +676,11 @@ MAIN_HTML_TEMPLATE = """
             if (targetProgress === 0) {
                 targetProgress = 1.0;
                 currentMode = 'day';
+                isSetting = false;
             } else {
                 targetProgress = 0.0;
                 currentMode = 'night';
+                isSetting = true;
             }
             localStorage.setItem('sky_theme_mode', currentMode);
             applyThemeUI(currentMode);
@@ -726,6 +720,13 @@ MAIN_HTML_TEMPLATE = """
             size: Math.random() * 2,
             alpha: Math.random(),
             speed: Math.random() * 0.012 + 0.005
+        }));
+
+        const celestialBodies = Array.from({ length: 35 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 1.5 + 0.5,
+            alpha: Math.random()
         }));
 
         let tick = 0;
@@ -826,17 +827,41 @@ MAIN_HTML_TEMPLATE = """
             drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.35)', 'rgba(0, 150, 255, 0.03)', 0.8, auroraOpacity);
             drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraOpacity);
 
-            /* ==========================================
-               ☀️ 태양 궤도 & 광원 버그 수정 반영 부분
-               ========================================== */
-            if (progress > 0.001) {
-                // 부드러운 아치(호) 모양을 그리며 수평선 너머로 자연스럽게 이동하는 계산식
+            // 🌙 달(Moon) 렌더링 추가 (밤 모드에서 상단 우측 영역에 위치, 낮에는 서서히 사라짐)
+            const moonOpacity = Math.max(0, 1 - progress * 1.5);
+            if (moonOpacity > 0) {
+                const moonX = canvas.width * 0.78;
+                const moonY = canvas.height * 0.22;
+                const moonRadius = 32;
+
+                const moonGlow = ctx.createRadialGradient(moonX, moonY, 5, moonX, moonY, moonRadius * 2.5);
+                moonGlow.addColorStop(0, `rgba(220, 235, 255, ${0.3 * moonOpacity})`);
+                moonGlow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = moonGlow;
+                ctx.beginPath();
+                ctx.arc(moonX, moonY, moonRadius * 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(moonX, moonY, moonRadius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(240, 246, 255, ${moonOpacity})`;
+                ctx.shadowColor = `rgba(200, 220, 255, ${0.6 * moonOpacity})`;
+                ctx.shadowBlur = 25;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // 초승달/입체감을 위한 음영 크레이터 효과
+                ctx.beginPath();
+                ctx.arc(moonX - 8, moonY - 6, moonRadius * 0.85, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(205, 218, 240, ${0.5 * moonOpacity})`;
+                ctx.fill();
+            }
+
+            // ☀️ 태양(Sun) 궤도 보정 및 위치 변경 (호 형태의 아치형 궤도로 상공에 안정적으로 머무르도록 개선)
+            if (progress > 0.01) {
+                const sunArcAngle = progress * Math.PI;
                 const sunX = canvas.width * 0.15 + progress * (canvas.width * 0.7);
-                
-                // 태양 상승 및 수평선 하강 y-offset 보정 (직하강 버그 방지)
-                const arcHeight = canvas.height * 0.75;
-                const horizonOffset = canvas.height * 1.15;
-                const sunY = horizonOffset - Math.sin(progress * Math.PI) * arcHeight;
+                const sunY = (canvas.height * 0.85) - Math.sin(sunArcAngle) * (canvas.height * 0.55) + (progress * canvas.height * 0.1);
 
                 const r = 255;
                 const g = 245 - sunsetOpacity * 100;
@@ -872,6 +897,7 @@ MAIN_HTML_TEMPLATE = """
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
 
+        // 미리보기 토글 상태 관리
         let embedPreviewEnabled = localStorage.getItem('sky_embed_preview') !== 'false';
 
         function toggleEmbedPreview(enabled) {
@@ -880,6 +906,7 @@ MAIN_HTML_TEMPLATE = """
             renderCategorizedSidebar();
         }
 
+        // 유튜브 링크 처리 및 임베드 변환 헬퍼 함수
         function processYoutubeEmbeds(content, enablePreview) {
             if (!content) return '';
             
@@ -1042,6 +1069,7 @@ MAIN_HTML_TEMPLATE = """
                 const current = appState.manuals[selectedManualIndex] || appState.manuals[0];
                 document.getElementById('doc-title').innerText = `${current.pinned ? '📌 ' : ''}${current.title}`;
                 
+                // 유튜브 및 미디어 링크 미리보기 변환 로직 적용
                 const processedContent = processYoutubeEmbeds(current.content, embedPreviewEnabled);
                 document.getElementById('doc-body').innerHTML = processedContent;
             }
@@ -1101,13 +1129,6 @@ MAIN_HTML_TEMPLATE = """
             const htmlSnippet = `
 <div style="margin:15px 0; position:relative; display:inline-block;">
     <button class="btn-ui" onclick="showBubblePop(this, '${msg}')">${btnText || '상호작용 테스트'}</button>
-</div>
-<!-- 2026 미래형 플립 디스플레이 삽입 예시 -->
-<div class="flip-clock-container">
-    <div class="flip-card">2</div>
-    <div class="flip-card">0</div>
-    <div class="flip-card">2</div>
-    <div class="flip-card">6</div>
 </div>
 <div class="key-display">
     <span>실제 키보드를 눌러보세요:</span>
@@ -1210,7 +1231,7 @@ MAIN_HTML_TEMPLATE = """
             }
 
             container.innerHTML = questions.map((q, qIdx) => `
-                <div style="background:rgba(0,0,0,0.15); backdrop-filter:blur(10px); padding:16px; border-radius:12px; margin-bottom:16px; border:1px solid rgba(125,125,125,0.2);">
+                <div style="background:rgba(0,0,0,0.2); padding:16px; border-radius:12px; margin-bottom:16px; border:1px solid rgba(125,125,125,0.2);">
                     <div style="font-weight:bold; margin-bottom:10px; color:var(--text-main);">Q${qIdx+1}. ${q.question}</div>
                     <div>
                         ${q.options.map((opt, oIdx) => `
@@ -1491,331 +1512,398 @@ MAIN_HTML_TEMPLATE = """
 </html>
 """
 
+
 # --------------------------------------------------
 # 🛣️ Flask 라우트 정의
 # --------------------------------------------------
 @app.route("/")
 def index():
-    return render_template_string(MAIN_HTML_TEMPLATE, client_id=CLIENT_ID)
+  return render_template_string(MAIN_HTML_TEMPLATE, client_id=CLIENT_ID)
+
 
 @app.route("/callback")
 def callback():
-    code = request.args.get("code")
-    if not code:
-        return redirect("/")
-
-    redirect_uri = f"{BASE_URL}/callback"
-    
-    token_res = requests.post("https://discord.com/api/oauth2/token", data={
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": redirect_uri
-    }, headers={"Content-Type": "application/x-www-form-urlencoded"})
-
-    if token_res.status_code != 200:
-        return redirect("/")
-
-    access_token = token_res.json().get("access_token")
-    user_res = requests.get("https://discord.com/api/users/@me", headers={
-        "Authorization": f"Bearer {access_token}"
-    })
-
-    if user_res.status_code == 200:
-        session["user"] = user_res.json()
-        
-        data = load_data()
-        user_id = str(session["user"]["id"])
-        user_name = session["user"].get("global_name") or session["user"].get("username")
-        
-        if "user_profiles" not in data: data["user_profiles"] = {}
-        data["user_profiles"][user_id] = {
-            "username": session["user"].get("username"),
-            "global_name": session["user"].get("global_name") or session["user"].get("username"),
-            "avatar_url": f"https://cdn.discordapp.com/avatars/{user_id}/{session['user'].get('avatar')}.png" if session["user"].get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
-        }
-
-        add_log(data, "인증", user_name, f"시스템 로그인 성공 (ID: {user_id})")
-        save_data(data)
-
+  code = request.args.get("code")
+  if not code:
     return redirect("/")
+
+  redirect_uri = f"{BASE_URL}/callback"
+
+  token_res = requests.post(
+      "https://discord.com/api/oauth2/token",
+      data={
+          "client_id": CLIENT_ID,
+          "client_secret": CLIENT_SECRET,
+          "grant_type": "authorization_code",
+          "code": code,
+          "redirect_uri": redirect_uri,
+      },
+      headers={"Content-Type": "application/x-www-form-urlencoded"},
+  )
+
+  if token_res.status_code != 200:
+    return redirect("/")
+
+  access_token = token_res.json().get("access_token")
+  user_res = requests.get(
+      "https://discord.com/api/users/@me",
+      headers={"Authorization": f"Bearer {access_token}"},
+  )
+
+  if user_res.status_code == 200:
+    session["user"] = user_res.json()
+
+    data = load_data()
+    user_id = str(session["user"]["id"])
+    user_name = session["user"].get("global_name") or session["user"].get(
+        "username"
+    )
+
+    if "user_profiles" not in data:
+      data["user_profiles"] = {}
+    data["user_profiles"][user_id] = {
+        "username": session["user"].get("username"),
+        "global_name": session["user"].get("global_name")
+        or session["user"].get("username"),
+        "avatar_url": (
+            f"https://cdn.discordapp.com/avatars/{user_id}/{session['user'].get('avatar')}.png"
+            if session["user"].get("avatar")
+            else "https://cdn.discordapp.com/embed/avatars/0.png"
+        ),
+    }
+
+    add_log(data, "인증", user_name, f"시스템 로그인 성공 (ID: {user_id})")
+    save_data(data)
+
+  return redirect("/")
+
 
 @app.route("/logout")
 def logout():
-    session.clear()
-    return redirect("/")
+  session.clear()
+  return redirect("/")
+
 
 @app.route("/api/state")
 def get_state():
-    user = session.get("user")
-    if not user:
-        return jsonify({"status": "unauthorized"}), 200
+  user = session.get("user")
+  if not user:
+    return jsonify({"status": "unauthorized"}), 200
 
-    data = load_data()
-    user_id = str(user.get("id"))
+  data = load_data()
+  user_id = str(user.get("id"))
 
-    if user_id in data.get("user_blacklist", []):
-        session.clear()
-        return jsonify({"error": "blacklisted"}), 403
+  if user_id in data.get("user_blacklist", []):
+    session.clear()
+    return jsonify({"error": "blacklisted"}), 403
 
-    role = "guest"
-    if user_id in data.get("admin_whitelist", DEFAULT_ADMINS):
-        role = "admin"
-    elif user_id in data.get("user_whitelist", []):
-        role = "staff"
-    else:
-        session.clear()
-        return jsonify({"error": "not_authorized"}), 403
+  role = "guest"
+  if user_id in data.get("admin_whitelist", DEFAULT_ADMINS):
+    role = "admin"
+  elif user_id in data.get("user_whitelist", []):
+    role = "staff"
+  else:
+    session.clear()
+    return jsonify({"error": "not_authorized"}), 403
 
-    return jsonify({
-        "user": user,
-        "role": role,
-        "manuals": data.get("manuals", []),
-        "quiz_config": data.get("quiz_config", {"difficulty": "medium", "count": 3}),
-        "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
-        "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
-        "admin_whitelist": data.get("admin_whitelist", []) if role == "admin" else [],
-        "user_profiles": data.get("user_profiles", {}),
-        "logs": data.get("logs", []) if role == "admin" else []
-    })
+  return jsonify({
+      "user": user,
+      "role": role,
+      "manuals": data.get("manuals", []),
+      "quiz_config": data.get(
+          "quiz_config", {"difficulty": "medium", "count": 3}
+      ),
+      "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
+      "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
+      "admin_whitelist": data.get("admin_whitelist", [])
+      if role == "admin"
+      else [],
+      "user_profiles": data.get("user_profiles", {}),
+      "logs": data.get("logs", []) if role == "admin" else [],
+  })
+
 
 @app.route("/api/admin/user_info/<user_id>")
 def get_user_info(user_id):
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
+  user = session.get("user")
+  if not user:
+    return jsonify({"error": "unauthorized"}), 401
 
-    data = load_data()
-    profiles = data.get("user_profiles", {})
+  data = load_data()
+  profiles = data.get("user_profiles", {})
 
-    if user_id in profiles:
-        prof = profiles[user_id]
-        return jsonify({"id": user_id, "username": prof.get("username"), "global_name": prof.get("global_name"), "avatar_url": prof.get("avatar_url")})
-
+  if user_id in profiles:
+    prof = profiles[user_id]
     return jsonify({
         "id": user_id,
-        "username": f"user_{user_id[-4:]}",
-        "global_name": f"스태프 ({user_id[-4:]})",
-        "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png"
+        "username": prof.get("username"),
+        "global_name": prof.get("global_name"),
+        "avatar_url": prof.get("avatar_url"),
     })
+
+  return jsonify({
+      "id": user_id,
+      "username": f"user_{user_id[-4:]}",
+      "global_name": f"스태프 ({user_id[-4:]})",
+      "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png",
+  })
+
 
 @app.route("/api/log/action", methods=["POST"])
 def log_action():
-    user = session.get("user")
-    if not user:
-        return jsonify({"status": "ignored"}), 200
+  user = session.get("user")
+  if not user:
+    return jsonify({"status": "ignored"}), 200
 
-    data = load_data()
-    req_data = request.json or {}
-    action = req_data.get("action", "알 수 없는 행동")
-    device = req_data.get("device", "PC")
-    user_name = user.get("global_name") or user.get("username")
+  data = load_data()
+  req_data = request.json or {}
+  action = req_data.get("action", "알 수 없는 행동")
+  device = req_data.get("device", "PC")
+  user_name = user.get("global_name") or user.get("username")
 
-    add_log(data, "보안 감지", user_name, action, device_type=device)
-    save_data(data)
-    return jsonify({"status": "logged"})
+  add_log(data, "보안 감지", user_name, action, device_type=device)
+  save_data(data)
+  return jsonify({"status": "logged"})
+
 
 @app.route("/api/admin/manual", methods=["POST"])
 def admin_manual():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
+  user = session.get("user")
+  if not user:
+    return jsonify({"error": "unauthorized"}), 401
 
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
+  data = load_data()
+  if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+    return jsonify({"error": "forbidden"}), 403
 
-    req_data = request.json or {}
-    idx = req_data.get("index")
-    category = req_data.get("category", "공통 매뉴얼")
-    pinned = req_data.get("pinned", False)
-    title = req_data.get("title")
-    content = req_data.get("content")
+  req_data = request.json or {}
+  idx = req_data.get("index")
+  category = req_data.get("category", "공통 매뉴얼")
+  pinned = req_data.get("pinned", False)
+  title = req_data.get("title")
+  content = req_data.get("content")
 
-    user_name = user.get("global_name") or user.get("username")
-    manual_item = {
-        "id": int(datetime.datetime.now().timestamp()),
-        "category": category,
-        "pinned": pinned,
-        "title": title,
-        "content": content
-    }
+  user_name = user.get("global_name") or user.get("username")
+  manual_item = {
+      "id": int(datetime.datetime.now().timestamp()),
+      "category": category,
+      "pinned": pinned,
+      "title": title,
+      "content": content,
+  }
 
-    if idx is not None and 0 <= idx < len(data["manuals"]):
-        data["manuals"][idx] = manual_item
-        add_log(data, "매뉴얼 수정", user_name, f"매뉴얼 '{title}' 수정 완료")
-    else:
-        data["manuals"].append(manual_item)
-        add_log(data, "매뉴얼 등록", user_name, f"새 매뉴얼 '{title}' 등록 완료")
+  if idx is not None and 0 <= idx < len(data["manuals"]):
+    data["manuals"][idx] = manual_item
+    add_log(data, "매뉴얼 수정", user_name, f"매뉴얼 '{title}' 수정 완료")
+  else:
+    data["manuals"].append(manual_item)
+    add_log(data, "매뉴얼 등록", user_name, f"새 매뉴얼 '{title}' 등록 완료")
 
-    save_data(data)
-    return jsonify({"status": "success"})
+  save_data(data)
+  return jsonify({"status": "success"})
+
 
 @app.route("/api/admin/manual/delete", methods=["POST"])
 def admin_manual_delete():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
+  user = session.get("user")
+  if not user:
+    return jsonify({"error": "unauthorized"}), 401
 
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
+  data = load_data()
+  if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+    return jsonify({"error": "forbidden"}), 403
 
-    idx = request.json.get("index")
-    if idx is not None and 0 <= idx < len(data["manuals"]):
-        deleted = data["manuals"].pop(idx)
-        user_name = user.get("global_name") or user.get("username")
-        add_log(data, "매뉴얼 삭제", user_name, f"매뉴얼 '{deleted.get('title')}' 삭제 완료")
-        save_data(data)
+  idx = request.json.get("index")
+  if idx is not None and 0 <= idx < len(data["manuals"]):
+    deleted = data["manuals"].pop(idx)
+    user_name = user.get("global_name") or user.get("username")
+    add_log(
+        data,
+        "매뉴얼 삭제",
+        user_name,
+        f"매뉴얼 '{deleted.get('title')}' 삭제 완료",
+    )
+    save_data(data)
 
-    return jsonify({"status": "success"})
+  return jsonify({"status": "success"})
+
 
 @app.route("/api/admin/permission", methods=["POST"])
 def admin_permission():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
+  user = session.get("user")
+  if not user:
+    return jsonify({"error": "unauthorized"}), 401
 
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
+  data = load_data()
+  if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+    return jsonify({"error": "forbidden"}), 403
 
-    target = request.json.get("target")
-    action = request.json.get("action")
-    target_id = str(request.json.get("user_id"))
-    is_admin = request.json.get("is_admin", False)
+  target = request.json.get("target")
+  action = request.json.get("action")
+  target_id = str(request.json.get("user_id"))
+  is_admin = request.json.get("is_admin", False)
 
-    if target == "whitelist":
-        if action == "add":
-            if "user_whitelist" not in data: data["user_whitelist"] = []
-            if target_id not in data["user_whitelist"]:
-                data["user_whitelist"].append(target_id)
-            if "user_blacklist" in data and target_id in data["user_blacklist"]:
-                data["user_blacklist"].remove(target_id)
+  if target == "whitelist":
+    if action == "add":
+      if "user_whitelist" not in data:
+        data["user_whitelist"] = []
+      if target_id not in data["user_whitelist"]:
+        data["user_whitelist"].append(target_id)
+      if "user_blacklist" in data and target_id in data["user_blacklist"]:
+        data["user_blacklist"].remove(target_id)
 
-            if is_admin:
-                if "admin_whitelist" not in data: data["admin_whitelist"] = []
-                if target_id not in data["admin_whitelist"]:
-                    data["admin_whitelist"].append(target_id)
+      if is_admin:
+        if "admin_whitelist" not in data:
+          data["admin_whitelist"] = []
+        if target_id not in data["admin_whitelist"]:
+          data["admin_whitelist"].append(target_id)
 
-        elif action == "remove":
-            if "user_whitelist" in data and target_id in data["user_whitelist"]:
-                data["user_whitelist"].remove(target_id)
+    elif action == "remove":
+      if "user_whitelist" in data and target_id in data["user_whitelist"]:
+        data["user_whitelist"].remove(target_id)
 
-    elif target == "blacklist":
-        if action == "add":
-            if "user_blacklist" not in data: data["user_blacklist"] = []
-            if target_id not in data["user_blacklist"]:
-                data["user_blacklist"].append(target_id)
-            if "user_whitelist" in data and target_id in data["user_whitelist"]:
-                data["user_whitelist"].remove(target_id)
-            if "admin_whitelist" in data and target_id in data["admin_whitelist"] and target_id not in DEFAULT_ADMINS:
-                data["admin_whitelist"].remove(target_id)
+  elif target == "blacklist":
+    if action == "add":
+      if "user_blacklist" not in data:
+        data["user_blacklist"] = []
+      if target_id not in data["user_blacklist"]:
+        data["user_blacklist"].append(target_id)
+      if "user_whitelist" in data and target_id in data["user_whitelist"]:
+        data["user_whitelist"].remove(target_id)
+      if (
+          "admin_whitelist" in data
+          and target_id in data["admin_whitelist"]
+          and target_id not in DEFAULT_ADMINS
+      ):
+        data["admin_whitelist"].remove(target_id)
 
-        elif action == "remove":
-            if "user_blacklist" in data and target_id in data["user_blacklist"]:
-                data["user_blacklist"].remove(target_id)
+    elif action == "remove":
+      if "user_blacklist" in data and target_id in data["user_blacklist"]:
+        data["user_blacklist"].remove(target_id)
 
-    save_data(data)
-    return jsonify({"status": "success"})
+  save_data(data)
+  return jsonify({"status": "success"})
+
 
 @app.route("/api/admin/permission/batch", methods=["POST"])
 def admin_permission_batch():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
+  user = session.get("user")
+  if not user:
+    return jsonify({"error": "unauthorized"}), 401
 
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
+  data = load_data()
+  if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+    return jsonify({"error": "forbidden"}), 403
 
-    user_ids = request.json.get("user_ids", [])
-    action = request.json.get("action")
-    user_name = user.get("global_name") or user.get("username")
+  user_ids = request.json.get("user_ids", [])
+  action = request.json.get("action")
+  user_name = user.get("global_name") or user.get("username")
 
-    for uid in user_ids:
-        uid = str(uid)
-        if action == "admin_upgrade":
-            if uid not in data.get("admin_whitelist", []):
-                data.setdefault("admin_whitelist", []).append(uid)
-            if uid not in data.get("user_whitelist", []):
-                data.setdefault("user_whitelist", []).append(uid)
-        elif action == "admin_demote":
-            if uid in data.get("admin_whitelist", []) and uid not in DEFAULT_ADMINS:
-                data["admin_whitelist"].remove(uid)
-        elif action == "blacklist":
-            if uid not in data.get("user_blacklist", []):
-                data.setdefault("user_blacklist", []).append(uid)
-            if uid in data.get("user_whitelist", []):
-                data["user_whitelist"].remove(uid)
-            if uid in data.get("admin_whitelist", []) and uid not in DEFAULT_ADMINS:
-                data["admin_whitelist"].remove(uid)
-        elif action == "remove":
-            if uid in data.get("user_whitelist", []):
-                data["user_whitelist"].remove(uid)
-            if uid in data.get("blacklist", []):
-                data["user_blacklist"].remove(uid)
+  for uid in user_ids:
+    uid = str(uid)
+    if action == "admin_upgrade":
+      if uid not in data.get("admin_whitelist", []):
+        data.setdefault("admin_whitelist", []).append(uid)
+      if uid not in data.get("user_whitelist", []):
+        data.setdefault("user_whitelist", []).append(uid)
+    elif action == "admin_demote":
+      if uid in data.get("admin_whitelist", []) and uid not in DEFAULT_ADMINS:
+        data["admin_whitelist"].remove(uid)
+    elif action == "blacklist":
+      if uid not in data.get("user_blacklist", []):
+        data.setdefault("user_blacklist", []).append(uid)
+      if uid in data.get("user_whitelist", []):
+        data["user_whitelist"].remove(uid)
+      if (
+          uid in data.get("admin_whitelist", [])
+          and uid not in DEFAULT_ADMINS
+      ):
+        data["admin_whitelist"].remove(uid)
+    elif action == "remove":
+      if uid in data.get("user_whitelist", []):
+        data["user_whitelist"].remove(uid)
+      if uid in data.get("blacklist", []):
+        data["user_blacklist"].remove(uid)
 
-    add_log(data, "일괄 권한 변경", user_name, f"유저 {len(user_ids)}명에 대해 '{action}' 처리 수행")
-    save_data(data)
-    return jsonify({"status": "success"})
+  add_log(
+      data,
+      "일괄 권한 변경",
+      user_name,
+      f"유저 {len(user_ids)}명에 대해 '{action}' 처리 수행",
+  )
+  save_data(data)
+  return jsonify({"status": "success"})
+
 
 @app.route("/api/admin/quiz_config", methods=["POST"])
 def admin_quiz_config():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
+  user = session.get("user")
+  if not user:
+    return jsonify({"error": "unauthorized"}), 401
 
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
+  data = load_data()
+  if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+    return jsonify({"error": "forbidden"}), 403
 
-    req_data = request.json or {}
-    difficulty = req_data.get("difficulty", "medium")
-    count = req_data.get("count", 3)
+  req_data = request.json or {}
+  difficulty = req_data.get("difficulty", "medium")
+  count = req_data.get("count", 3)
 
-    data["quiz_config"] = {
-        "difficulty": difficulty,
-        "count": count
-    }
-    
-    user_name = user.get("global_name") or user.get("username")
-    add_log(data, "퀴즈 설정", user_name, f"퀴즈 설정 변경 (난이도: {difficulty}, 문제수: {count})")
-    save_data(data)
-    return jsonify({"status": "success"})
+  data["quiz_config"] = {"difficulty": difficulty, "count": count}
+
+  user_name = user.get("global_name") or user.get("username")
+  add_log(
+      data,
+      "퀴즈 설정",
+      user_name,
+      f"퀴즈 설정 변경 (난이도: {difficulty}, 문제수: {count})",
+  )
+  save_data(data)
+  return jsonify({"status": "success"})
+
 
 @app.route("/api/quiz/generate", methods=["POST"])
 def generate_quiz():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
+  user = session.get("user")
+  if not user:
+    return jsonify({"error": "unauthorized"}), 401
 
-    data = load_data()
-    req_data = request.json or {}
-    manual_idx = req_data.get("manual_index", 0)
+  data = load_data()
+  req_data = request.json or {}
+  manual_idx = req_data.get("manual_index", 0)
 
-    manuals = data.get("manuals", [])
-    if manual_idx >= len(manuals):
-        manual_idx = 0
+  manuals = data.get("manuals", [])
+  if manual_idx >= len(manuals):
+    manual_idx = 0
 
-    target_manual = manuals[manual_idx] if manuals else {"title": "기본", "content": "내용 없음"}
-    quiz_config = data.get("quiz_config", {"difficulty": "medium", "count": 3})
+  target_manual = (
+      manuals[manual_idx] if manuals else {"title": "기본", "content": "내용 없음"}
+  )
+  quiz_config = data.get("quiz_config", {"difficulty": "medium", "count": 3})
 
-    if not OPENAI_API_KEY:
-        return jsonify({
-            "questions": [
-                {
-                    "question": f"[{target_manual.get('title')}] 본 매뉴얼의 핵심 지침으로 올바른 것은 무엇입니까?",
-                    "options": ["외부 유출 허용", "무단 캡처 금지 및 보안 유지", "계정 공유 권장", "로그 기록 비활성화"],
-                    "answer_index": 1,
-                    "explanation": "매뉴얼 지침에 따라 시스템 정보 유출 및 무단 캡처는 엄격히 금지됩니다."
-                }
-            ]
-        })
+  if not OPENAI_API_KEY:
+    return jsonify({
+        "questions": [{
+            "question": (
+                f"[{target_manual.get('title')}] 본 매뉴얼의 핵심 지침으로"
+                " 올바른 것은 무엇입니까?"
+            ),
+            "options": [
+                "외부 유출 허용",
+                "무단 캡처 금지 및 보안 유지",
+                "계정 공유 권장",
+                "로그 기록 비활성화",
+            ],
+            "answer_index": 1,
+            "explanation": (
+                "매뉴얼 지침에 따라 시스템 정보 유출 및 무단 캡처는 엄격히"
+                " 금지됩니다."
+            ),
+        }]
+    })
 
-    try:
-        prompt = f"""
+  try:
+    prompt = f"""
 다음 매뉴얼 내용을 바탕으로 {quiz_config['count']}개의 객관식 퀴즈 문제를 생성하세요.
 난이도: {quiz_config['difficulty']}
 
@@ -1834,23 +1922,29 @@ def generate_quiz():
   ]
 }}
 """
-        res = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": prompt}],
-                "response_format": {"type": "json_object"}
-            },
-            timeout=15
-        )
-        if res.status_code == 200:
-            result_json = json.loads(res.json()['choices'][0]['message']['content'])
-            return jsonify(result_json)
-        else:
-            return jsonify({"error": "AI API 호출 실패"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    res = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"},
+        },
+        timeout=15,
+    )
+    if res.status_code == 200:
+      result_json = json.loads(
+          res.json()["choices"][0]["message"]["content"]
+      )
+      return jsonify(result_json)
+    else:
+      return jsonify({"error": "AI API 호출 실패"}), 500
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+  app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
