@@ -491,8 +491,11 @@ MAIN_HTML_TEMPLATE = """
         }, true);
 
         document.addEventListener('keyup', function(e) { if (!e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) { releaseSecurityLock(); } });
-        window.addEventListener('blur', triggerSecurityLock); window.addEventListener('focus', releaseSecurityLock);
-        document.addEventListener('visibilitychange', function() { if (document.hidden) triggerSecurityLock(); else releaseSecurityLock(); });
+        // 주의: 과거에는 window 'blur'/'focus'와 'visibilitychange'에도 보안 잠금을 걸었는데,
+        // 창이 처음 로드될 때 포커스 상태가 애매하거나 포커스가 잠깐 다른 곳으로 이동만 해도
+        // 잠금 오버레이(#security-overlay, z-index 99999999)가 화면 전체를 덮은 채 풀리지 않아
+        // 로그인 버튼을 포함한 모든 클릭이 막히는 문제가 있었습니다. 실제 캡처 시도(PrintScreen,
+        // F12, Win+Shift+S 등)는 keydown 핸들러에서 이미 감지하므로 아래 두 줄은 제거합니다.
 
         function showNotification(msg) {
             const toast = document.getElementById('custom-notification');
@@ -791,7 +794,11 @@ MAIN_HTML_TEMPLATE = """
         if (savedTheme) {
             currentMode = savedTheme;
         } else {
-            const currentHour = new Date().getHours();
+            // 로컬(브라우저) 시간이 아니라 한국시간(KST, UTC+9) 기준으로 낮/밤 판정
+            const nowForTheme = new Date();
+            const utcForTheme = nowForTheme.getTime() + (nowForTheme.getTimezoneOffset() * 60000);
+            const kstForTheme = new Date(utcForTheme + (9 * 3600000));
+            const currentHour = kstForTheme.getHours();
             currentMode = (currentHour >= 6 && currentHour < 18) ? 'day' : 'night';
         }
 
