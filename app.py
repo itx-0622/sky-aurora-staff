@@ -28,6 +28,17 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
 
 
+def get_kst_now():
+  """KST(한국 표준시) datetime 객체 반환"""
+  return datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+
+
+def get_kst_str():
+  """한국시간 년 월 일 시 분 초 포맷팅 문자열 반환"""
+  now = get_kst_now()
+  return now.strftime("%Y년 %m월 %d일 %H시 %M분 %S초")
+
+
 # --------------------------------------------------
 # 📁 데이터 불러오기 및 영구 저장 로직
 # --------------------------------------------------
@@ -102,11 +113,9 @@ def save_data(data):
           "utf-8"
       )
 
-      now_kst = (
-          datetime.datetime.utcnow() + datetime.timedelta(hours=9)
-      ).strftime("%Y-%m-%d %H:%M:%S")
+      now_kst_str = get_kst_str()
       payload = {
-          "message": f"Auto-sync manual data [{now_kst} KST]",
+          "message": f"Auto-sync manual data [{now_kst_str}]",
           "content": encoded_content,
       }
       if sha:
@@ -118,10 +127,10 @@ def save_data(data):
 
 
 def add_log(data, category, user_name, action, device_type="PC"):
-  now_kst = (
-      datetime.datetime.utcnow() + datetime.timedelta(hours=9)
-  ).strftime("%Y-%m-%d %H:%M:%S")
-  log_entry = f"[{now_kst} KST] [{category}] [{device_type}] {user_name}: {action}"
+  now_kst_str = get_kst_str()
+  log_entry = (
+      f"[{now_kst_str}] [{category}] [{device_type}] {user_name}: {action}"
+  )
   if "logs" not in data:
     data["logs"] = []
   data["logs"].insert(0, log_entry)
@@ -274,17 +283,30 @@ MAIN_HTML_TEMPLATE = """
         
         .header-controls { display: flex; align-items: center; gap: 16px; }
 
-        /* ⏱️ 2026형 3D 플립 시계 스타일 */
-        .flip-clock {
-            display: flex; gap: 6px; align-items: center; perspective: 400px; font-family: 'GmarketSansBold', monospace;
+        /* ⏱️ 2026년식 모던 3D 플립 시계 및 KST 날짜 레이아웃 디스플레이 */
+        .clock-container {
+            display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-family: 'GmarketSansBold', monospace;
         }
-        .flip-unit-group { display: flex; gap: 3px; }
+        .date-display {
+            font-size: 11px; color: var(--flip-text); letter-spacing: 0.5px; opacity: 0.9;
+            background: rgba(0, 0, 0, 0.2); padding: 2px 8px; border-radius: 10px; border: 1px solid var(--flip-border);
+        }
+        .flip-clock {
+            display: flex; gap: 4px; align-items: center; perspective: 500px;
+        }
+        .flip-unit-group { display: flex; gap: 2px; }
         .flip-card {
-            position: relative; width: 28px; height: 38px; background: var(--flip-bg);
+            position: relative; width: 26px; height: 34px; background: var(--flip-bg);
             border: 1px solid var(--flip-border); border-radius: 6px; color: var(--flip-text);
-            font-size: 20px; font-weight: bold; display: flex; justify-content: center; align-items: center;
+            font-size: 18px; font-weight: bold; display: flex; justify-content: center; align-items: center;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
             transform-style: preserve-3d; transition: background 0.5s, color 0.5s, border-color 0.5s;
+        }
+        .flip-ampm-card {
+            position: relative; padding: 0 6px; height: 34px; background: var(--flip-bg);
+            border: 1px solid var(--flip-border); border-radius: 6px; color: var(--flip-text);
+            font-size: 12px; font-weight: bold; display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3); letter-spacing: 1px;
         }
         .flip-card::after {
             content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 50%;
@@ -299,7 +321,7 @@ MAIN_HTML_TEMPLATE = """
             50% { transform: rotateX(-90deg); filter: brightness(1.2); }
             100% { transform: rotateX(0deg); }
         }
-        .flip-colon { font-size: 18px; color: var(--flip-text); font-weight: bold; animation: blink 1s infinite; }
+        .flip-colon { font-size: 16px; color: var(--flip-text); font-weight: bold; animation: blink 1s infinite; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
         .theme-toggle-btn {
@@ -317,7 +339,7 @@ MAIN_HTML_TEMPLATE = """
         .logout-btn { font-family: 'Pretendard', sans-serif; color: var(--text-sub); text-decoration: none; font-size: 12px; padding: 6px 12px; border: 1px solid var(--container-border); border-radius: 8px; backdrop-filter: blur(5px); }
         .logout-btn:hover { color: var(--text-main); border-color: #00ffaa; background: rgba(0, 255, 170, 0.15); }
 
-        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; border-radius: 24px; }
+        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; border-radius: 24px; z-index: 10; position: relative; }
         .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 14px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.25s; box-shadow: 0 8px 20px rgba(88, 101, 242, 0.4); }
         .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 12px 25px rgba(88, 101, 242, 0.6); }
 
@@ -415,7 +437,7 @@ MAIN_HTML_TEMPLATE = """
             header h1 { font-size: 15px; }
             .doc-title { font-size: 17px; }
             .doc-body { font-size: 14px; padding: 14px; }
-            .flip-card { width: 22px; height: 30px; font-size: 16px; }
+            .flip-card { width: 22px; height: 30px; font-size: 15px; }
         }
     </style>
     <script>
@@ -458,7 +480,6 @@ MAIN_HTML_TEMPLATE = """
                 setTimeout(() => keyCap.classList.remove('active'), 300);
             }
 
-            // ⌨️ 매뉴얼 편집 창에서 Shift + Enter 입력 시 <br/> 추가 처리
             if (e.target && e.target.id === 'm-edit-content' && e.shiftKey && e.key === 'Enter') {
                 e.preventDefault();
                 const textarea = e.target;
@@ -516,21 +537,28 @@ MAIN_HTML_TEMPLATE = """
         <header>
             <h1>SKY AURORA STAFF SYSTEM</h1>
             <div class="header-controls">
-                <!-- ⏱️ 2026형 3D 플립 시계 -->
-                <div class="flip-clock" id="3d-flip-clock">
-                    <div class="flip-unit-group">
-                        <div class="flip-card" id="fh1">0</div>
-                        <div class="flip-card" id="fh2">0</div>
-                    </div>
-                    <div class="flip-colon">:</div>
-                    <div class="flip-unit-group">
-                        <div class="flip-card" id="fm1">0</div>
-                        <div class="flip-card" id="fm2">0</div>
-                    </div>
-                    <div class="flip-colon">:</div>
-                    <div class="flip-unit-group">
-                        <div class="flip-card" id="fs1">0</div>
-                        <div class="flip-card" id="fs2">0</div>
+                <!-- ⏱️ 2026년식 모던 KST 한국시간 12시간제 3D 플립 시계 -->
+                <div class="clock-container">
+                    <div class="date-display" id="kst-date-text">2026년 01월 01일</div>
+                    <div class="flip-clock" id="3d-flip-clock">
+                        <div class="flip-unit-group">
+                            <div class="flip-card" id="fh1">0</div>
+                            <div class="flip-card" id="fh2">0</div>
+                        </div>
+                        <span style="font-size:11px; font-weight:bold; color:var(--flip-text);">시</span>
+                        <div class="flip-ampm-card" id="f-ampm">AM</div>
+                        <div class="flip-colon">:</div>
+                        <div class="flip-unit-group">
+                            <div class="flip-card" id="fm1">0</div>
+                            <div class="flip-card" id="fm2">0</div>
+                        </div>
+                        <span style="font-size:11px; font-weight:bold; color:var(--flip-text);">분</span>
+                        <div class="flip-colon">:</div>
+                        <div class="flip-unit-group">
+                            <div class="flip-card" id="fs1">0</div>
+                            <div class="flip-card" id="fs2">0</div>
+                        </div>
+                        <span style="font-size:11px; font-weight:bold; color:var(--flip-text);">초</span>
                     </div>
                 </div>
 
@@ -702,14 +730,37 @@ MAIN_HTML_TEMPLATE = """
     </div>
 
     <script>
-        // ⏱️ 2026형 3D 플립 시계 엔진
+        // ⏱️ 2026년식 3D 플립 시계 및 한국시간(KST) 12시간제 엔진
         let lastTimeStr = "";
         function updateFlipClock() {
             const now = new Date();
-            const h = String(now.getHours()).padStart(2, '0');
-            const m = String(now.getMinutes()).padStart(2, '0');
-            const s = String(now.getSeconds()).padStart(2, '0');
-            const currStr = h + m + s;
+            // KST 시간 계산 (UTC+9)
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const kst = new Date(utc + (9 * 3600000));
+
+            const yyyy = kst.getFullYear();
+            const mm = String(kst.getMonth() + 1).padStart(2, '0');
+            const dd = String(kst.getDate()).padStart(2, '0');
+            
+            const dateElem = document.getElementById('kst-date-text');
+            if (dateElem) {
+                dateElem.innerText = `${yyyy}년 ${mm}월 ${dd}일`;
+            }
+
+            let hours = kst.getHours();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12; // 0시일 경우 12시로 표시
+
+            const hStr = String(hours).padStart(2, '0');
+            const mStr = String(kst.getMinutes()).padStart(2, '0');
+            const sStr = String(kst.getSeconds()).padStart(2, '0');
+            const currStr = hStr + mStr + sStr + ampm;
+
+            const ampmElem = document.getElementById('f-ampm');
+            if (ampmElem && ampmElem.innerText !== ampm) {
+                ampmElem.innerText = ampm;
+            }
 
             if (currStr !== lastTimeStr) {
                 const ids = ['fh1', 'fh2', 'fm1', 'fm2', 'fs1', 'fs2'];
@@ -718,7 +769,7 @@ MAIN_HTML_TEMPLATE = """
                     if (card && (!lastTimeStr || lastTimeStr[i] !== currStr[i])) {
                         card.innerText = currStr[i];
                         card.classList.remove('flipping');
-                        void card.offsetWidth; // Reflow 트리거
+                        void card.offsetWidth;
                         card.classList.add('flipping');
                     }
                 }
@@ -850,7 +901,6 @@ MAIN_HTML_TEMPLATE = """
             ctx.fillStyle = grad; ctx.filter = 'blur(25px)'; ctx.fill(); ctx.restore();
         }
 
-        // ☀️/🌙 태양 및 달 물리 궤도 애니메이션 보정
         function animate() {
             progress += (targetProgress - progress) * 0.02;
 
@@ -896,7 +946,6 @@ MAIN_HTML_TEMPLATE = """
             drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.35)', 'rgba(0, 150, 255, 0.03)', 0.8, auroraOpacity);
             drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraOpacity);
 
-            // 🌙 달(Moon) 물리 궤도 (밤일 때 높게 뜨고 낮일 때 지평선 아래로 수직 하강)
             const moonOpacity = Math.max(0, 1 - progress * 1.5);
             if (moonOpacity > 0) {
                 const moonX = canvas.width * 0.78;
@@ -925,7 +974,6 @@ MAIN_HTML_TEMPLATE = """
                 ctx.fill();
             }
 
-            // ☀️ 태양(Sun) 호(Arc) 물리 궤도 보정 (낮에는 하늘 높이 호를 그리며, 밤에는 y-offset 확대로 지평선 완벽 은닉)
             const sunArcAngle = progress * Math.PI;
             const sunX = canvas.width * 0.15 + progress * (canvas.width * 0.7);
             const baseSunY = (canvas.height * 0.85) - Math.sin(sunArcAngle) * (canvas.height * 0.55);
@@ -997,10 +1045,19 @@ MAIN_HTML_TEMPLATE = """
         async function syncSystemState() {
             try {
                 const res = await fetch('/api/state');
-                if (res.status === 403) { showNotification("권한이 없거나 차단된 계정입니다."); location.reload(); return; }
+                if (res.status === 403) { 
+                    showNotification("권한이 없거나 차단된 계정입니다."); 
+                    document.getElementById('login-box').style.display = 'block';
+                    document.getElementById('main-dashboard').style.display = 'none';
+                    return; 
+                }
                 if (res.ok) {
                     const data = await res.json();
-                    if (data.status === 'unauthorized') return;
+                    if (data.status === 'unauthorized') {
+                        document.getElementById('login-box').style.display = 'block';
+                        document.getElementById('main-dashboard').style.display = 'none';
+                        return;
+                    }
 
                     appState = data;
                     document.getElementById('login-box').style.display = 'none';
@@ -1021,7 +1078,6 @@ MAIN_HTML_TEMPLATE = """
             } catch(e) { console.error("Sync error:", e); }
         }
 
-        // 🌌 인트로 연출 모듈 (사용자 별명(사용자 이름) 님 환영합니다 유지 및 기깔난 애니메이션)
         function runCustomIntro(nickname, username, avatarUrl, onComplete) {
             const introOverlay = document.getElementById('intro-overlay');
             const introProgress = document.getElementById('intro-progress');
@@ -1148,7 +1204,6 @@ MAIN_HTML_TEMPLATE = """
                     document.getElementById('m-edit-category').value = current.category || '';
                     document.getElementById('m-edit-pinned').checked = !!current.pinned;
                     document.getElementById('m-edit-title').value = current.title || '';
-                    // 불러올 때 <br/>을 \n으로 복원하여 편하게 편집
                     document.getElementById('m-edit-content').value = (current.content || '').replace(/<br\s*[\/]?>/gi, '\n');
                 }
             }
@@ -1428,7 +1483,6 @@ MAIN_HTML_TEMPLATE = """
 
             if (!title || !rawContent) return showNotification("제목과 내용을 입력해주세요.");
 
-            // ↵ 엔터 줄바꿈을 <br/> 태그로 자동 치환하여 저장
             const formattedContent = rawContent.replace(/\r\n|\r|\n/g, '<br/>');
 
             const res = await fetch('/api/admin/manual', {
@@ -1815,7 +1869,7 @@ def admin_permission_batch():
     elif action == "remove":
       if uid in data.get("user_whitelist", []):
         data["user_whitelist"].remove(uid)
-      if uid in data.get("blacklist", []):
+      if uid in data.get("user_blacklist", []):
         data["user_blacklist"].remove(uid)
 
   add_log(
