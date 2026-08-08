@@ -2,6 +2,7 @@ import os
 import json
 import base64
 import datetime
+import random
 from flask import Flask, request, render_template_string, redirect, session, jsonify
 import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -23,6 +24,7 @@ DEFAULT_ADMINS = ["1534184089144266872", "843621337066504225"]
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # --------------------------------------------------
 # 📁 데이터 불러오기 및 영구 저장 로직
@@ -60,6 +62,10 @@ def load_data():
         "user_whitelist": [],
         "user_blacklist": [],
         "user_profiles": {},
+        "quiz_config": {
+            "difficulty": "medium",
+            "count": 3
+        },
         "manuals": [
             {
                 "id": 1,
@@ -115,13 +121,10 @@ MAIN_HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>SKY AURORA STAFF MANUAL</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+    <!-- Pretendard & Orbitron 폰트 탑재 -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
     <style>
-        @font-face {
-            font-family: 'GmarketSansBold';
-            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/GmarketSansBold.woff') format('woff');
-            font-weight: normal; font-style: normal;
-        }
         * {
             box-sizing: border-box; margin: 0; padding: 0;
             -webkit-user-select: none !important; -moz-user-select: none !important; -ms-user-select: none !important; user-select: none !important;
@@ -130,38 +133,50 @@ MAIN_HTML_TEMPLATE = """
         
         :root {
             --bg-body: #030509;
-            --container-bg: rgba(8, 12, 24, 0.85);
+            --container-bg: rgba(8, 12, 24, 0.65);
             --container-border: rgba(0, 255, 200, 0.25);
             --text-main: #ffffff;
             --text-sub: #cbd5e1;
-            --header-bg: rgba(5, 8, 18, 0.95);
-            --sidebar-bg: rgba(0, 0, 0, 0.4);
-            --card-bg: rgba(5, 8, 17, 0.7);
-            --input-bg: rgba(3, 5, 9, 0.8);
-            --btn-item-bg: rgba(10, 16, 32, 0.95);
+            --header-bg: rgba(5, 8, 18, 0.75);
+            --sidebar-bg: rgba(0, 0, 0, 0.3);
+            --card-bg: rgba(8, 14, 28, 0.55);
+            --input-bg: rgba(3, 5, 9, 0.7);
+            --btn-item-bg: rgba(10, 16, 32, 0.75);
             --intro-bg: #030509;
             --intro-border: #00ffaa;
             --intro-text: #ffffff;
+
+            /* 2026 플립 디스플레이 테마 변수 (나이트) */
+            --flip-bg: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9));
+            --flip-text: #00ffaa;
+            --flip-border: rgba(0, 255, 170, 0.3);
+            --flip-shadow: 0 0 15px rgba(0, 255, 170, 0.25);
         }
 
         body.day-theme {
             --bg-body: #e0f2fe;
-            --container-bg: rgba(255, 255, 255, 0.85);
+            --container-bg: rgba(255, 255, 255, 0.65);
             --container-border: rgba(56, 189, 248, 0.4);
             --text-main: #0f172a;
             --text-sub: #334155;
-            --header-bg: rgba(241, 245, 249, 0.95);
-            --sidebar-bg: rgba(255, 255, 255, 0.5);
-            --card-bg: rgba(255, 255, 255, 0.75);
-            --input-bg: rgba(255, 255, 255, 0.9);
-            --btn-item-bg: rgba(241, 245, 249, 0.95);
+            --header-bg: rgba(241, 245, 249, 0.8);
+            --sidebar-bg: rgba(255, 255, 255, 0.35);
+            --card-bg: rgba(255, 255, 255, 0.6);
+            --input-bg: rgba(255, 255, 255, 0.85);
+            --btn-item-bg: rgba(241, 245, 249, 0.85);
             --intro-bg: #f0f9ff;
             --intro-border: #0284c7;
             --intro-text: #0f172a;
+
+            /* 2026 플립 디스플레이 테마 변수 (데이) */
+            --flip-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(241, 245, 249, 0.95));
+            --flip-text: #1e293b;
+            --flip-border: rgba(56, 189, 248, 0.4);
+            --flip-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
         }
 
         body {
-            font-family: 'GmarketSansBold', 'Pretendard', sans-serif;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
             background: var(--bg-body); color: var(--text-main); overflow: hidden; height: 100vh; width: 100vw;
             display: flex; justify-content: center; align-items: center; transition: background 0.5s ease, color 0.5s ease;
         }
@@ -172,15 +187,15 @@ MAIN_HTML_TEMPLATE = """
         }
         .alert-icon { font-size: 80px; color: #ff2d55; margin-bottom: 20px; animation: pulse 1.2s infinite ease-in-out; }
         .alert-main-text { font-size: 24px; font-weight: bold; color: #ff2d55; margin-bottom: 12px; }
-        .alert-sub-text { font-size: 14px; color: #a0aec0; font-family: 'Pretendard', sans-serif; }
+        .alert-sub-text { font-size: 14px; color: #a0aec0; }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
         #custom-notification {
             position: fixed; top: 25px; right: 25px; z-index: 999999; display: flex; align-items: center; gap: 12px;
-            padding: 14px 22px; background: rgba(8, 15, 30, 0.95); border: 1px solid #00ffaa;
+            padding: 14px 22px; background: rgba(8, 15, 30, 0.85); backdrop-filter: blur(20px); border: 1px solid #00ffaa;
             border-radius: 14px; box-shadow: 0 0 20px rgba(0, 255, 170, 0.4); color: #fff;
             transform: translateX(150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            font-family: 'Pretendard', sans-serif; font-size: 14px; font-weight: 600;
+            font-size: 14px; font-weight: 600;
         }
         #custom-notification.show { transform: translateX(0); }
 
@@ -207,96 +222,74 @@ MAIN_HTML_TEMPLATE = """
             border: 2px solid var(--intro-border); box-shadow: 0 0 25px rgba(0,255,170,0.6); z-index: 2;
         }
         .intro-avatar.show { opacity: 1; transform: scale(1); }
-        .intro-progress-text { font-size: 28px; color: var(--intro-border); font-family: 'GmarketSansBold'; letter-spacing: 1px; }
-        .intro-welcome-text { font-size: 18px; color: var(--intro-text); font-family: 'Pretendard'; font-weight: 600; margin-top: 16px; opacity: 0; transition: opacity 0.5s ease; text-align: center; padding: 0 20px; }
+        .intro-progress-text { font-size: 28px; color: var(--intro-border); font-family: 'Orbitron', sans-serif; font-weight: 800; letter-spacing: 2px; }
+        .intro-welcome-text { font-size: 18px; color: var(--intro-text); font-weight: 600; margin-top: 16px; opacity: 0; transition: opacity 0.5s ease; text-align: center; padding: 0 20px; }
         .intro-welcome-text.show { opacity: 1; }
 
         #bg-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
 
+        /* Glassmorphism 메인 컨테이너 */
         .container {
             position: relative; z-index: 2; width: 94%; max-width: 1280px; height: 90vh;
-            background: var(--container-bg); backdrop-filter: blur(25px); border: 1px solid var(--container-border);
-            border-radius: 24px; box-shadow: 0 0 60px rgba(0, 255, 170, 0.12);
+            background: var(--container-bg); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--container-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
             display: flex; flex-direction: column; overflow: hidden; animation: containerAppear 0.8s ease;
             transition: background 0.5s ease, border-color 0.5s ease;
         }
         @keyframes containerAppear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-        header { padding: 14px 24px; background: var(--header-bg); border-bottom: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; transition: background 0.5s ease; flex-wrap: wrap; gap: 10px; }
-        header h1 { font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        header { padding: 16px 24px; background: var(--header-bg); backdrop-filter: blur(15px); border-bottom: 1px solid rgba(125, 125, 125, 0.15); display: flex; justify-content: space-between; align-items: center; transition: background 0.5s ease; }
+        header h1 { font-family: 'Orbitron', 'Pretendard', sans-serif; font-weight: 900; font-size: 20px; letter-spacing: 1px; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         
-        /* 🛫 플립 디스플레이 시계 스타일 */
-        .flip-clock-container {
-            display: flex; align-items: center; gap: 4px; background: #080b12; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(0, 255, 170, 0.3); box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
-        }
-        .flip-group { display: flex; align-items: center; gap: 2px; }
-        .flip-unit-label { font-size: 11px; color: #00ffaa; font-family: 'Pretendard'; font-weight: bold; margin: 0 2px; }
-        .flip-card {
-            position: relative; width: 22px; height: 30px; background: #111622; color: #fff; font-family: monospace; font-size: 18px; font-weight: bold; border-radius: 4px;
-            display: flex; justify-content: center; align-items: center; perspective: 300px; box-shadow: 0 2px 4px rgba(0,0,0,0.5); border: 1px solid #222b3e;
-        }
-        .flip-card::after {
-            content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(0,0,0,0.7); z-index: 5;
-        }
-        .flip-card.animate .flip-inner {
-            animation: flipAnim 0.5s cubic-bezier(0.4, 0.0, 0.2, 1);
-        }
-        @keyframes flipAnim {
-            0% { transform: rotateX(0deg); }
-            50% { transform: rotateX(-90deg); background: #1a2234; }
-            100% { transform: rotateX(0deg); }
-        }
-
         .header-controls { display: flex; align-items: center; gap: 12px; }
         .theme-toggle-btn {
-            background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3);
-            color: var(--text-main); font-family: 'Pretendard'; font-size: 12px; font-weight: bold;
-            padding: 6px 14px; border-radius: 20px; cursor: pointer; transition: all 0.3s;
-            display: flex; align-items: center; gap: 6px; backdrop-filter: blur(5px);
+            background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.25);
+            color: var(--text-main); font-size: 12px; font-weight: 700;
+            padding: 7px 16px; border-radius: 20px; cursor: pointer; transition: all 0.3s;
+            display: flex; align-items: center; gap: 6px; backdrop-filter: blur(8px);
         }
-        body.day-theme .theme-toggle-btn { background: rgba(0, 0, 0, 0.08); border-color: rgba(0, 0, 0, 0.2); }
-        .theme-toggle-btn:hover { transform: scale(1.05); }
+        body.day-theme .theme-toggle-btn { background: rgba(0, 0, 0, 0.06); border-color: rgba(0, 0, 0, 0.15); }
+        .theme-toggle-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 255, 170, 0.2); }
 
-        .badge-admin { background: rgba(255, 45, 85, 0.2); border: 1px solid #ff2d55; color: #ff2d55; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
-        .badge-staff { background: rgba(0, 255, 170, 0.2); border: 1px solid #00ffaa; color: #00ffaa; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
+        .badge-admin { background: rgba(255, 45, 85, 0.2); border: 1px solid #ff2d55; color: #ff2d55; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
+        .badge-staff { background: rgba(0, 255, 170, 0.2); border: 1px solid #00ffaa; color: #00ffaa; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
         .avatar-img { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #00ffaa; }
-        .logout-btn { font-family: 'Pretendard', sans-serif; color: var(--text-sub); text-decoration: none; font-size: 12px; padding: 5px 12px; border: 1px solid rgba(125,125,125,0.3); border-radius: 8px; }
+        .logout-btn { color: var(--text-sub); text-decoration: none; font-size: 12px; padding: 5px 12px; border: 1px solid rgba(125,125,125,0.3); border-radius: 8px; transition: all 0.2s; }
         .logout-btn:hover { color: var(--text-main); border-color: #00ffaa; background: rgba(0, 255, 170, 0.1); }
 
-        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; background: var(--card-bg); border: 1px solid var(--container-border); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); }
-        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
+        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; background: var(--card-bg); backdrop-filter: blur(20px); border: 1px solid var(--container-border); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); }
+        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
         .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5); }
 
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         
-        .sidebar { width: 300px; background: var(--sidebar-bg); border-right: 1px solid rgba(125, 125, 125, 0.2); padding: 20px 14px; overflow-y: auto; transition: background 0.5s ease; }
-        .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1px; margin: 16px 0 8px 8px; text-transform: uppercase; font-family: 'Pretendard'; font-weight: bold; }
+        .sidebar { width: 300px; background: var(--sidebar-bg); backdrop-filter: blur(15px); border-right: 1px solid rgba(125, 125, 125, 0.15); padding: 20px 14px; overflow-y: auto; transition: background 0.5s ease; }
+        .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1.5px; margin: 16px 0 8px 8px; text-transform: uppercase; font-weight: 800; }
         body.day-theme .sidebar-category-title { color: #0284c7; }
         
-        .aurora-btn-wrapper { position: relative; margin-bottom: 8px; border-radius: 12px; overflow: hidden; padding: 2px; background: rgba(125, 125, 125, 0.05); transition: all 0.25s ease; }
-        .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); box-shadow: 0 0 15px rgba(0, 255, 170, 0.4); }
-        .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: var(--btn-item-bg); border: none; color: var(--text-sub); border-radius: 10px; cursor: pointer; font-size: 13px; font-family: 'Pretendard', sans-serif; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-        .aurora-btn-wrapper.active .item-btn { color: var(--text-main); font-weight: bold; }
+        .aurora-btn-wrapper { position: relative; margin-bottom: 8px; border-radius: 12px; overflow: hidden; padding: 1px; background: rgba(125, 125, 125, 0.08); transition: all 0.25s ease; }
+        .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); box-shadow: 0 0 15px rgba(0, 255, 170, 0.35); }
+        .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: var(--btn-item-bg); backdrop-filter: blur(10px); border: none; color: var(--text-sub); border-radius: 11px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
+        .aurora-btn-wrapper.active .item-btn { color: var(--text-main); font-weight: 700; }
         .pin-badge { font-size: 11px; margin-right: 4px; }
 
         .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; scroll-behavior: smooth; }
-        .content-card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid rgba(125, 125, 125, 0.15); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: relative; margin-bottom: 20px; transition: background 0.5s ease; }
+        .content-card { background: var(--card-bg); backdrop-filter: blur(20px); border: 1px solid rgba(125, 125, 125, 0.15); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); position: relative; margin-bottom: 20px; transition: background 0.5s ease; }
         
-        .doc-title { font-size: 20px; margin-bottom: 16px; color: var(--text-main); border-bottom: 1px solid rgba(125, 125, 125, 0.2); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        .doc-title { font-size: 20px; font-weight: 800; margin-bottom: 16px; color: var(--text-main); border-bottom: 1px solid rgba(125, 125, 125, 0.15); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
         .doc-title-text { display: flex; align-items: center; gap: 10px; }
         .doc-title-text::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
-        .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); background: rgba(0, 0, 0, 0.15); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
+        .doc-body { font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); background: rgba(0, 0, 0, 0.12); backdrop-filter: blur(10px); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
 
-        /* 동영상 미리보기 박스 스타일 */
         .video-embed-box { margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px; border: 1px solid rgba(0, 255, 170, 0.3); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
         .video-embed-box iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
 
-        input, textarea, select { width: 100%; background: var(--input-bg); color: var(--text-main); border: 1px solid rgba(125, 125, 125, 0.3); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; }
+        input, textarea, select { width: 100%; background: var(--input-bg); backdrop-filter: blur(10px); color: var(--text-main); border: 1px solid rgba(125, 125, 125, 0.25); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; transition: all 0.2s; }
         input:focus, textarea:focus, select:focus { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
 
         .btn-ui {
             position: relative; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none;
-            padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif;
+            padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer;
             transition: all 0.25s ease; outline: none; overflow: hidden;
         }
         .btn-ui::after {
@@ -304,19 +297,38 @@ MAIN_HTML_TEMPLATE = """
             background: radial-gradient(circle, rgba(0, 255, 170, 0.3) 0%, transparent 70%);
             opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
         }
-        .btn-ui:hover { transform: translateY(-2px); box-shadow: 0 0 15px rgba(0, 255, 170, 0.5), 0 0 30px rgba(0, 242, 254, 0.3); }
+        .btn-ui:hover { transform: translateY(-2px); box-shadow: 0 0 15px rgba(0, 255, 170, 0.5); }
         .btn-ui:hover::after { opacity: 1; }
         .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
         .btn-danger:hover { box-shadow: 0 0 15px rgba(255, 45, 85, 0.6); }
         .btn-secondary { background: linear-gradient(135deg, #475569, #334155); }
 
-        .editor-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 10px; }
-        .editor-toolbar button { padding: 6px 10px; font-size: 12px; background: var(--btn-item-bg); color: var(--text-main); border: 1px solid rgba(125,125,125,0.3); border-radius: 6px; cursor: pointer; font-family: 'Pretendard'; }
+        /* 2026 미래지향적 플립 디스플레이 스타일 (3D 회전 & 입체 반사) */
+        .flip-clock-container {
+            display: flex; gap: 12px; align-items: center; justify-content: center; margin: 20px 0; perspective: 1000px;
+        }
+        .flip-card {
+            position: relative; width: 64px; height: 80px; background: var(--flip-bg);
+            border: 1px solid var(--flip-border); border-radius: 12px;
+            box-shadow: var(--flip-shadow); transform-style: preserve-3d;
+            display: flex; justify-content: center; align-items: center;
+            font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 38px; color: var(--flip-text);
+            overflow: hidden; backdrop-filter: blur(15px); transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .flip-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%);
+            border-bottom: 1px solid rgba(0,0,0,0.15); pointer-events: none; z-index: 2;
+        }
+        .flip-card.flip-anim { transform: rotateX(-360deg); }
+
+        .editor-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; background: rgba(0,0,0,0.15); padding: 8px; border-radius: 10px; }
+        .editor-toolbar button { padding: 6px 10px; font-size: 12px; background: var(--btn-item-bg); color: var(--text-main); border: 1px solid rgba(125,125,125,0.2); border-radius: 6px; cursor: pointer; transition: all 0.2s; }
         .editor-toolbar button:hover { border-color: #00ffaa; color: #00ffaa; }
 
         .speech-bubble-pop {
             position: absolute; background: #00ffaa; color: #030509; padding: 10px 16px; border-radius: 12px;
-            font-size: 13px; font-weight: bold; font-family: 'Pretendard'; z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            font-size: 13px; font-weight: bold; z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.4);
             animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .speech-bubble-pop::after {
@@ -324,12 +336,12 @@ MAIN_HTML_TEMPLATE = """
         }
         @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-        .key-display { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.3); border-radius: 12px; margin-top: 10px; }
-        .key-cap { background: #334155; color: #fff; padding: 10px 16px; border-radius: 8px; border-bottom: 4px solid #1e293b; font-family: monospace; font-size: 18px; font-weight: bold; }
+        .key-display { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-top: 10px; }
+        .key-cap { background: #334155; color: #fff; padding: 10px 16px; border-radius: 8px; border-bottom: 4px solid #1e293b; font-family: 'Orbitron', monospace; font-size: 18px; font-weight: 800; transition: all 0.1s; }
         .key-cap.active { background: #00ffaa; color: #000; border-bottom-color: #00cc88; transform: translateY(2px); }
 
         ul.data-list { list-style: none; padding: 0; }
-        ul.data-list li { background: var(--btn-item-bg); padding: 14px; margin-bottom: 10px; border-radius: 12px; border: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
+        ul.data-list li { background: var(--btn-item-bg); backdrop-filter: blur(10px); padding: 14px; margin-bottom: 10px; border-radius: 12px; border: 1px solid rgba(125, 125, 125, 0.15); display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
 
         .user-card-info { display: flex; align-items: center; gap: 12px; }
         .user-card-avatar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #00ffaa; object-fit: cover; }
@@ -342,7 +354,7 @@ MAIN_HTML_TEMPLATE = """
 
         .mention-dropdown {
             position: absolute; top: 45px; left: 0; right: 0; z-index: 1000;
-            background: var(--card-bg); border: 1px solid #00ffaa; border-radius: 12px;
+            background: var(--card-bg); backdrop-filter: blur(20px); border: 1px solid #00ffaa; border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); display: none; max-height: 180px; overflow-y: auto;
         }
         .mention-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; transition: background 0.2s; }
@@ -356,12 +368,13 @@ MAIN_HTML_TEMPLATE = """
         @media (max-width: 768px) {
             .container { width: 100%; height: 100vh; border-radius: 0; border: none; }
             .dashboard { flex-direction: column; }
-            .sidebar { width: 100%; height: 210px; border-right: none; border-bottom: 1px solid rgba(125,125,125,0.2); padding: 12px; }
+            .sidebar { width: 100%; height: 210px; border-right: none; border-bottom: 1px solid rgba(125,125,125,0.15); padding: 12px; }
             .main-content { padding: 16px; }
             header { padding: 12px 16px; }
-            header h1 { font-size: 15px; }
+            header h1 { font-size: 16px; }
             .doc-title { font-size: 17px; }
             .doc-body { font-size: 14px; padding: 14px; }
+            .flip-card { width: 48px; height: 60px; font-size: 28px; }
         }
     </style>
     <script>
@@ -451,42 +464,6 @@ MAIN_HTML_TEMPLATE = """
     <div class="container">
         <header>
             <h1>SKY AURORA STAFF SYSTEM</h1>
-            
-            <!-- 🛫 공항 스타일 플립 디스플레이 시계 -->
-            <div class="flip-clock-container" id="flipClock">
-                <div class="flip-group">
-                    <div class="flip-card" id="fc-y1"><span class="flip-inner">0</span></div>
-                    <div class="flip-card" id="fc-y2"><span class="flip-inner">0</span></div>
-                    <div class="flip-card" id="fc-y3"><span class="flip-inner">0</span></div>
-                    <div class="flip-card" id="fc-y4"><span class="flip-inner">0</span></div>
-                    <span class="flip-unit-label">년</span>
-                </div>
-                <div class="flip-group">
-                    <div class="flip-card" id="fc-mo1"><span class="flip-inner">0</span></div>
-                    <div class="flip-card" id="fc-mo2"><span class="flip-inner">0</span></div>
-                    <span class="flip-unit-label">월</span>
-                </div>
-                <div class="flip-group">
-                    <div class="flip-card" id="fc-d1"><span class="flip-inner">0</span></div>
-                    <div class="flip-card" id="fc-d2"><span class="flip-inner">0</span></div>
-                    <span class="flip-unit-label">일</span>
-                </div>
-                <div class="flip-group" style="margin-left: 4px;">
-                    <div class="flip-card" id="fc-h1"><span class="flip-inner">0</span></div>
-                    <div class="flip-card" id="fc-h2"><span class="flip-inner">0</span></div>
-                    <span class="flip-unit-label">:</span>
-                </div>
-                <div class="flip-group">
-                    <div class="flip-card" id="fc-mi1"><span class="flip-inner">0</span></div>
-                    <div class="flip-card" id="fc-mi2"><span class="flip-inner">0</span></div>
-                    <span class="flip-unit-label">:</span>
-                </div>
-                <div class="flip-group">
-                    <div class="flip-card" id="fc-s1"><span class="flip-inner">0</span></div>
-                    <div class="flip-card" id="fc-s2"><span class="flip-inner">0</span></div>
-                </div>
-            </div>
-
             <div class="header-controls">
                 <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleThemeMode()">
                     <span id="themeBtnIcon">☀️</span> <span id="themeBtnText">데이 모드</span>
@@ -494,14 +471,14 @@ MAIN_HTML_TEMPLATE = """
                 <div id="user-header-info" style="display:none; align-items:center; gap:12px;">
                     <span id="user-role-badge" class="badge-staff">STAFF</span>
                     <img id="user-avatar" src="" alt="Avatar" class="avatar-img" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                    <span id="user-name" style="font-size: 13px; color: #00ffaa; font-family: 'Pretendard'; font-weight:600;"></span>
+                    <span id="user-name" style="font-size: 13px; color: #00ffaa; font-weight:600;"></span>
                     <a href="/logout" class="logout-btn">로그아웃</a>
                 </div>
             </div>
         </header>
 
         <div id="login-box" class="login-box">
-            <h2 style="font-size: 18px; margin-bottom: 24px; font-family: 'GmarketSansBold';">🔒 스태프 시스템 인증</h2>
+            <h2 style="font-size: 18px; margin-bottom: 24px; font-weight: 800;">🔒 스태프 시스템 인증</h2>
             <button onclick="login()" class="discord-btn">
                 디스코드 계정으로 통합 로그인
             </button>
@@ -511,7 +488,11 @@ MAIN_HTML_TEMPLATE = """
             <div class="sidebar">
                 <div id="manual-sidebar-categorized"></div>
 
-                <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(125,125,125,0.2); padding-top:10px;">
+                <div class="aurora-btn-wrapper" style="margin-top:15px;">
+                    <button class="item-btn" onclick="transitionToTab('view-quiz')">🧩 AI 매뉴얼 퀴즈</button>
+                </div>
+
+                <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(125,125,125,0.15); padding-top:10px;">
                     <div class="sidebar-category-title" style="color:#38bdf8;">Admin Controls</div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-m-manage">
                         <button class="item-btn" onclick="switchAdminTab('m-manage')">📖 매뉴얼 등록/관리</button>
@@ -529,7 +510,7 @@ MAIN_HTML_TEMPLATE = """
                 <div id="view-manual" class="tab-enter" style="display:block;">
                     <div class="doc-title">
                         <div id="doc-title" class="doc-title-text">매뉴얼 선택 중...</div>
-                        <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); display:flex; align-items:center; gap:6px; cursor:pointer;">
+                        <label style="font-size:12px; color:var(--text-sub); display:flex; align-items:center; gap:6px; cursor:pointer;">
                             <input type="checkbox" id="embed-preview-toggle" onchange="toggleEmbedPreview(this.checked)" checked style="width:auto; margin:0;">
                             🎥 링크 미리보기 켜기
                         </label>
@@ -537,17 +518,38 @@ MAIN_HTML_TEMPLATE = """
                     <div id="doc-body" class="doc-body"></div>
                 </div>
 
+                <!-- AI 퀴즈 탭 -->
+                <div id="view-quiz" class="tab-enter" style="display:none;">
+                    <div class="doc-title"><div class="doc-title-text">AI 매뉴얼 이해도 테스트</div></div>
+                    <div class="content-card">
+                        <div id="quiz-admin-config" style="display:none; margin-bottom:20px; background:rgba(56,189,248,0.1); padding:14px; border-radius:12px; border:1px solid #38bdf8;">
+                            <h4 style="color:#38bdf8; margin-bottom:8px;">⚙️ [어드민] 퀴즈 설정</h4>
+                            <div style="display:flex; gap:10px;">
+                                <select id="quiz-difficulty" style="margin:0;">
+                                    <option value="easy">난이도: 쉬움</option>
+                                    <option value="medium" selected>난이도: 보통</option>
+                                    <option value="hard">난이도: 어려움</option>
+                                </select>
+                                <input type="number" id="quiz-count" value="3" min="1" max="10" placeholder="문제 수" style="margin:0; width:100px;">
+                                <button onclick="saveQuizConfig()" class="btn-ui" style="flex-shrink:0;">설정 저장</button>
+                            </div>
+                        </div>
+
+                        <button onclick="generateQuiz()" class="btn-ui" style="width:100%; margin-bottom:20px;">🤖 현재 매뉴얼 기반 AI 문제 생성하기</button>
+                        <div id="quiz-container"></div>
+                    </div>
+                </div>
+
                 <div id="view-admin-m-manage" class="tab-enter" style="display:none;">
                     <div class="doc-title"><div class="doc-title-text">매뉴얼 신규 등록 및 작성</div></div>
                     <div class="content-card" id="manual-edit-card">
                         <div style="margin-bottom:12px;">
-                            <label style="font-size:12px; color:#00ffaa; font-family:'Pretendard'; font-weight:bold; display:block; margin-bottom:4px;">수정할 매뉴얼 선택</label>
+                            <label style="font-size:12px; color:#00ffaa; font-weight:bold; display:block; margin-bottom:4px;">수정할 매뉴얼 선택</label>
                             <select id="m-select-edit" onchange="onManualSelectToEdit(this.value)">
                                 <option value="-1">-- 새 매뉴얼 작성 --</option>
                             </select>
                         </div>
 
-                        <!-- 서식 확장 도구 모음 -->
                         <div class="editor-toolbar">
                             <button onclick="insertTag('<img>', '이미지 URL', 'https://via.placeholder.com/400x200')">📷 이미지 추가</button>
                             <button onclick="insertYoutubeEmbed()">▶️ 유튜브 링크 삽입</button>
@@ -561,7 +563,7 @@ MAIN_HTML_TEMPLATE = """
 
                         <div style="display:flex; gap:10px; margin-bottom:4px;">
                             <input type="text" id="m-edit-category" placeholder="주제(카테고리) 예: 운항 지침, 공통 매뉴얼" style="flex:2;">
-                            <label style="display:flex; align-items:center; gap:6px; font-family:'Pretendard'; font-size:13px; color:#00ffaa; cursor:pointer; padding-bottom:12px;">
+                            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#00ffaa; cursor:pointer; padding-bottom:12px;">
                                 <input type="checkbox" id="m-edit-pinned" style="width:auto; margin:0;"> 📌 상단 고정
                             </label>
                         </div>
@@ -603,7 +605,7 @@ MAIN_HTML_TEMPLATE = """
                             </div>
 
                             <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
-                                <label style="display:flex; align-items:center; gap:6px; font-family:'Pretendard'; font-size:13px; color:#38bdf8; cursor:pointer;">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#38bdf8; cursor:pointer;">
                                     <input type="checkbox" id="perm-is-admin" style="width:auto; margin:0;"> 👑 어드민 권한 부여
                                 </label>
                                 <div style="display:flex; gap:10px;">
@@ -628,7 +630,7 @@ MAIN_HTML_TEMPLATE = """
                         <div class="content-card">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                                 <h3 style="color:#4ade80; font-size:15px;">화이트리스트 목록</h3>
-                                <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); cursor:pointer;">
+                                <label style="font-size:12px; color:var(--text-sub); cursor:pointer;">
                                     <input type="checkbox" onclick="toggleSelectAll('wl-check', this.checked)" style="width:auto;"> 전체 선택
                                 </label>
                             </div>
@@ -637,7 +639,7 @@ MAIN_HTML_TEMPLATE = """
                         <div class="content-card">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                                 <h3 style="color:#f87171; font-size:15px;">블랙리스트 목록</h3>
-                                <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); cursor:pointer;">
+                                <label style="font-size:12px; color:var(--text-sub); cursor:pointer;">
                                     <input type="checkbox" onclick="toggleSelectAll('bl-check', this.checked)" style="width:auto;"> 전체 선택
                                 </label>
                             </div>
@@ -649,7 +651,7 @@ MAIN_HTML_TEMPLATE = """
                 <div id="view-admin-logs" class="tab-enter" style="display:none;">
                     <div class="doc-title"><div class="doc-title-text">실시간 활동 로그</div></div>
                     <div class="content-card">
-                        <div id="admin-log-box" style="background:var(--input-bg); padding:16px; border-radius:12px; font-family:monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(125,125,125,0.2);"></div>
+                        <div id="admin-log-box" style="background:var(--input-bg); backdrop-filter:blur(10px); padding:16px; border-radius:12px; font-family:'Orbitron', monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(125,125,125,0.2);"></div>
                     </div>
                 </div>
             </div>
@@ -657,46 +659,6 @@ MAIN_HTML_TEMPLATE = """
     </div>
 
     <script>
-        // ==========================================
-        // 🛫 공항 플립 시계 타이머 로직
-        // ==========================================
-        let lastClockStr = "";
-
-        function updateFlipCard(id, newChar) {
-            const card = document.getElementById(id);
-            if (!card) return;
-            const inner = card.querySelector('.flip-inner');
-            if (inner.innerText !== newChar) {
-                inner.innerText = newChar;
-                card.classList.remove('animate');
-                void card.offsetWidth; // Reflow 트리거
-                card.classList.add('animate');
-            }
-        }
-
-        function updateFlipClock() {
-            const now = new Date();
-            const y = String(now.getFullYear()).padStart(4, '0');
-            const mo = String(now.getMonth() + 1).padStart(2, '0');
-            const d = String(now.getDate()).padStart(2, '0');
-            const h = String(now.getHours()).padStart(2, '0');
-            const mi = String(now.getMinutes()).padStart(2, '0');
-            const s = String(now.getSeconds()).padStart(2, '0');
-
-            updateFlipCard('fc-y1', y[0]); updateFlipCard('fc-y2', y[1]);
-            updateFlipCard('fc-y3', y[2]); updateFlipCard('fc-y4', y[3]);
-            updateFlipCard('fc-mo1', mo[0]); updateFlipCard('fc-mo2', mo[1]);
-            updateFlipCard('fc-d1', d[0]); updateFlipCard('fc-d2', d[1]);
-            updateFlipCard('fc-h1', h[0]); updateFlipCard('fc-h2', h[1]);
-            updateFlipCard('fc-mi1', mi[0]); updateFlipCard('fc-mi2', mi[1]);
-            updateFlipCard('fc-s1', s[0]); updateFlipCard('fc-s2', s[1]);
-        }
-        setInterval(updateFlipClock, 1000);
-        updateFlipClock();
-
-        // ==========================================
-        // 🌌 배경 캔버스 그래픽 로직
-        // ==========================================
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
 
@@ -715,7 +677,6 @@ MAIN_HTML_TEMPLATE = """
 
         let progress = currentMode === 'day' ? 1.0 : 0.0;
         let targetProgress = progress;
-        let isSetting = currentMode === 'night';
 
         applyThemeUI(currentMode);
 
@@ -723,11 +684,9 @@ MAIN_HTML_TEMPLATE = """
             if (targetProgress === 0) {
                 targetProgress = 1.0;
                 currentMode = 'day';
-                isSetting = false;
             } else {
                 targetProgress = 0.0;
                 currentMode = 'night';
-                isSetting = true;
             }
             localStorage.setItem('sky_theme_mode', currentMode);
             applyThemeUI(currentMode);
@@ -757,34 +716,17 @@ MAIN_HTML_TEMPLATE = """
             const c2 = hexToRgb(hex2);
             const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
             const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
-            return `rgb(${r}, ${g}, ${Math.round(c1[2] + (c2[2] - c1[2]) * t)})`;
+            const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
+            return `rgb(${r}, ${g}, ${b})`;
         }
 
-        // 별 생성
-        const stars = Array.from({ length: 150 }, () => ({
-            x: Math.random() * window.innerWidth,
-            y: Math.random() * window.innerHeight,
-            size: Math.random() * 2.2 + 0.5,
+        const stars = Array.from({ length: 120 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 2,
             alpha: Math.random(),
-            speed: Math.random() * 0.02 + 0.005,
-            twinkleFreq: Math.random() * 0.05 + 0.01
+            speed: Math.random() * 0.012 + 0.005
         }));
-
-        // 별똥별(Shooting Stars) 관리 배열
-        const shootingStars = [];
-
-        function spawnShootingStar() {
-            if (Math.random() < 0.08) { // 기존보다 높은 확률로 별똥별 생성
-                shootingStars.push({
-                    x: Math.random() * canvas.width * 0.8,
-                    y: Math.random() * canvas.height * 0.4,
-                    length: Math.random() * 80 + 50,
-                    speed: Math.random() * 12 + 10,
-                    angle: Math.PI / 4 + (Math.random() * 0.2 - 0.1),
-                    opacity: 1
-                });
-            }
-        }
 
         let tick = 0;
 
@@ -807,6 +749,7 @@ MAIN_HTML_TEMPLATE = """
                 ctx.closePath();
                 
                 const rayGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, rayLength);
+                
                 const r = 255;
                 const g = 250 - sunsetGlow * 80;
                 const b = 224 - sunsetGlow * 150;
@@ -821,35 +764,26 @@ MAIN_HTML_TEMPLATE = """
             ctx.restore();
         }
 
-        // 역동적인 오로라 렌더링
         function drawRibbonAurora(yOffset, waveHeight, color1, color2, speedMult, opacity) {
             if (opacity <= 0) return;
             ctx.save();
             ctx.globalAlpha = opacity;
             ctx.beginPath();
-            
-            const startY = yOffset + Math.sin(tick * speedMult) * 35;
+            const startY = yOffset + Math.sin(tick * speedMult) * 20;
             ctx.moveTo(0, startY);
-            for (let x = 0; x <= canvas.width; x += 20) {
-                const y = yOffset + Math.sin(x * 0.003 + tick * speedMult * 1.5) * waveHeight 
-                                  + Math.cos(x * 0.001 + tick * speedMult * 0.8) * (waveHeight * 0.5);
+            for (let x = 0; x <= canvas.width; x += 30) {
+                const y = yOffset + Math.sin(x * 0.0025 + tick * speedMult) * waveHeight;
                 ctx.lineTo(x, y);
             }
-            ctx.lineTo(canvas.width, startY + 280); 
-            ctx.lineTo(0, startY + 280); 
-            ctx.closePath();
-            
-            const grad = ctx.createLinearGradient(0, yOffset - 50, canvas.width, yOffset + 300);
-            grad.addColorStop(0, color1); 
-            grad.addColorStop(1, color2);
-            ctx.fillStyle = grad; 
-            ctx.filter = 'blur(20px)'; 
-            ctx.fill(); 
-            ctx.restore();
+            ctx.lineTo(canvas.width, startY + 200); ctx.lineTo(0, startY + 200); ctx.closePath();
+            const grad = ctx.createLinearGradient(0, yOffset - 50, canvas.width, yOffset + 200);
+            grad.addColorStop(0, color1); grad.addColorStop(1, color2);
+            ctx.fillStyle = grad; ctx.filter = 'blur(25px)'; ctx.fill(); ctx.restore();
         }
 
         function animate() {
-            progress += (targetProgress - progress) * 0.03; // 전환 속도 자연스럽게 보정
+            progress += (targetProgress - progress) * 0.02;
+
             const sunsetOpacity = Math.max(0, 1 - Math.abs(progress - 0.5) * 2.2);
 
             const skyTop = interpolateColor('#030509', '#38bdf8', progress);
@@ -876,11 +810,8 @@ MAIN_HTML_TEMPLATE = """
 
             tick += 0.015;
 
-            // 나이트 모드 그래픽 (별, 별자리 선, 별똥별, 오로라)
             if (progress < 0.8) {
                 const starAlphaMult = 1 - progress;
-
-                // 1. 별 그리기 및 반짝임
                 stars.forEach(s => {
                     s.alpha += s.speed;
                     if (s.alpha > 1 || s.alpha < 0) s.speed = -s.speed;
@@ -889,95 +820,54 @@ MAIN_HTML_TEMPLATE = """
                     ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
                     ctx.fill();
                 });
-
-                // 2. 별자리 선 잇기
-                ctx.strokeStyle = `rgba(0, 255, 200, ${0.12 * starAlphaMult})`;
-                ctx.lineWidth = 0.8;
-                for (let i = 0; i < stars.length; i += 4) {
-                    for (let j = i + 1; j < i + 3; j++) {
-                        if (j < stars.length) {
-                            const dist = Math.hypot(stars[i].x - stars[j].x, stars[i].y - stars[j].y);
-                            if (dist < 130) {
-                                ctx.beginPath();
-                                ctx.moveTo(stars[i].x, stars[i].y);
-                                ctx.lineTo(stars[j].x, stars[j].y);
-                                ctx.stroke();
-                            }
-                        }
-                    }
-                }
-
-                // 3. 높은 확률 별똥별
-                spawnShootingStar();
-                for (let i = shootingStars.length - 1; i >= 0; i--) {
-                    const st = shootingStars[i];
-                    st.x += Math.cos(st.angle) * st.speed;
-                    st.y += Math.sin(st.angle) * st.speed;
-                    st.opacity -= 0.018;
-
-                    if (st.opacity <= 0) {
-                        shootingStars.splice(i, 1);
-                        continue;
-                    }
-
-                    const tailX = st.x - Math.cos(st.angle) * st.length;
-                    const tailY = st.y - Math.sin(st.angle) * st.length;
-
-                    const grad = ctx.createLinearGradient(st.x, st.y, tailX, tailY);
-                    grad.addColorStop(0, `rgba(255, 255, 255, ${st.opacity * starAlphaMult})`);
-                    grad.addColorStop(0.3, `rgba(0, 255, 200, ${st.opacity * 0.6 * starAlphaMult})`);
-                    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-
-                    ctx.strokeStyle = grad;
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(st.x, st.y);
-                    ctx.lineTo(tailX, tailY);
-                    ctx.stroke();
-                }
             }
 
-            // 오로라 연출 (풍성하고 더 높게 춤추는 오로라)
             const auroraOpacity = 1 - progress;
-            drawRibbonAurora(canvas.height * 0.05, 95, 'rgba(0, 255, 170, 0.45)', 'rgba(0, 150, 255, 0.05)', 0.9, auroraOpacity);
-            drawRibbonAurora(canvas.height * 0.12, 120, 'rgba(0, 180, 255, 0.35)', 'rgba(160, 0, 255, 0.05)', 1.2, auroraOpacity);
-            drawRibbonAurora(canvas.height * 0.20, 80, 'rgba(140, 255, 0, 0.25)', 'rgba(0, 200, 255, 0.02)', 0.7, auroraOpacity);
+            drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.35)', 'rgba(0, 150, 255, 0.03)', 0.8, auroraOpacity);
+            drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraOpacity);
 
-            // 데이/나이트 원형 태양/달 움직임
-            const sunX = canvas.width * 0.1 + progress * (canvas.width * 0.8);
-            const sunY = canvas.height * 0.95 - Math.sin(progress * Math.PI) * (canvas.height * 0.75);
+            /* ==========================================
+               ☀️ 태양 궤도 & 광원 버그 수정 반영 부분
+               ========================================== */
+            if (progress > 0.001) {
+                // 부드러운 아치(호) 모양을 그리며 수평선 너머로 자연스럽게 이동하는 계산식
+                const sunX = canvas.width * 0.15 + progress * (canvas.width * 0.7);
+                
+                // 태양 상승 및 수평선 하강 y-offset 보정 (직하강 버그 방지)
+                const arcHeight = canvas.height * 0.75;
+                const horizonOffset = canvas.height * 1.15;
+                const sunY = horizonOffset - Math.sin(progress * Math.PI) * arcHeight;
 
-            const r = 255;
-            const g = 245 - sunsetOpacity * 100;
-            const b = 180 - sunsetOpacity * 180;
+                const r = 255;
+                const g = 245 - sunsetOpacity * 100;
+                const b = 180 - sunsetOpacity * 180;
 
-            const glowGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 350);
-            glowGrad.addColorStop(0, `rgba(${r}, ${g}, ${Math.max(0, b)}, ${0.8 * progress})`);
-            glowGrad.addColorStop(0.5, `rgba(${r}, ${g - 30}, ${Math.max(0, b - 50)}, ${0.4 * progress})`);
-            glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            
-            ctx.fillStyle = glowGrad;
-            ctx.beginPath();
-            ctx.arc(sunX, sunY, 350, 0, Math.PI * 2);
-            ctx.fill();
+                const glowGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 350);
+                glowGrad.addColorStop(0, `rgba(${r}, ${g}, ${Math.max(0, b)}, ${0.8 * progress})`);
+                glowGrad.addColorStop(0.5, `rgba(${r}, ${g - 30}, ${Math.max(0, b - 50)}, ${0.4 * progress})`);
+                glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                
+                ctx.fillStyle = glowGrad;
+                ctx.beginPath();
+                ctx.arc(sunX, sunY, 350, 0, Math.PI * 2);
+                ctx.fill();
 
-            drawSunRays(sunX, sunY, progress, sunsetOpacity);
+                drawSunRays(sunX, sunY, progress, sunsetOpacity);
 
-            ctx.beginPath();
-            ctx.arc(sunX, sunY, 38, 0, Math.PI * 2);
-            ctx.fillStyle = progress > 0.5 
-                ? `rgba(255, 253, ${235 - sunsetOpacity * 100}, ${Math.min(1, progress * 1.2)})`
-                : `rgba(240, 245, 255, ${1 - progress})`;
-            ctx.shadowColor = `rgba(${r}, ${g}, ${Math.max(0, b)}, 0.8)`;
-            ctx.shadowBlur = 40 + sunsetOpacity * 20;
-            ctx.fill();
-            ctx.shadowBlur = 0;
+                ctx.beginPath();
+                ctx.arc(sunX, sunY, 40, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 253, ${235 - sunsetOpacity * 100}, ${Math.min(1, progress * 1.2)})`;
+                ctx.shadowColor = `rgba(${r}, ${g}, ${Math.max(0, b)}, 0.8)`;
+                ctx.shadowBlur = 40 + sunsetOpacity * 20;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
 
             requestAnimationFrame(animate);
         }
         animate();
 
-        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [] };
+        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [], quiz_config: {difficulty:'medium', count:3} };
         let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
@@ -992,6 +882,7 @@ MAIN_HTML_TEMPLATE = """
 
         function processYoutubeEmbeds(content, enablePreview) {
             if (!content) return '';
+            
             const ytRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[^\s<]*)?/g;
 
             if (enablePreview) {
@@ -1088,10 +979,17 @@ MAIN_HTML_TEMPLATE = """
                 roleBadge.innerText = 'ADMIN';
                 roleBadge.className = 'badge-admin';
                 document.getElementById('admin-menu-section').style.display = 'block';
+                document.getElementById('quiz-admin-config').style.display = 'block';
+                
+                if (data.quiz_config) {
+                    document.getElementById('quiz-difficulty').value = data.quiz_config.difficulty || 'medium';
+                    document.getElementById('quiz-count').value = data.quiz_config.count || 3;
+                }
             } else {
                 roleBadge.innerText = 'STAFF';
                 roleBadge.className = 'badge-staff';
                 document.getElementById('admin-menu-section').style.display = 'none';
+                document.getElementById('quiz-admin-config').style.display = 'none';
             }
 
             renderCategorizedSidebar();
@@ -1204,6 +1102,13 @@ MAIN_HTML_TEMPLATE = """
 <div style="margin:15px 0; position:relative; display:inline-block;">
     <button class="btn-ui" onclick="showBubblePop(this, '${msg}')">${btnText || '상호작용 테스트'}</button>
 </div>
+<!-- 2026 미래형 플립 디스플레이 삽입 예시 -->
+<div class="flip-clock-container">
+    <div class="flip-card">2</div>
+    <div class="flip-card">0</div>
+    <div class="flip-card">2</div>
+    <div class="flip-card">6</div>
+</div>
 <div class="key-display">
     <span>실제 키보드를 눌러보세요:</span>
     <div id="active-key-cap" class="key-cap">KEY</div>
@@ -1277,6 +1182,75 @@ MAIN_HTML_TEMPLATE = """
             if (navEl) navEl.classList.add('active');
             
             transitionToTab(`view-admin-${tabName}`);
+        }
+
+        async function generateQuiz() {
+            const container = document.getElementById('quiz-container');
+            container.innerHTML = '<div style="text-align:center; padding:20px; color:#00ffaa;">🤖 AI가 매뉴얼을 분석하여 퀴즈를 생성하고 있습니다...</div>';
+
+            const res = await fetch('/api/quiz/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ manual_index: selectedManualIndex })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                renderQuiz(data.questions);
+            } else {
+                container.innerHTML = '<div style="color:#ff2d55; padding:10px;">퀴즈 생성에 실패했습니다. (OpenAI API 키 설정 확인 필요)</div>';
+            }
+        }
+
+        function renderQuiz(questions) {
+            const container = document.getElementById('quiz-container');
+            if (!questions || questions.length === 0) {
+                container.innerHTML = '<div>생성된 문제가 없습니다.</div>';
+                return;
+            }
+
+            container.innerHTML = questions.map((q, qIdx) => `
+                <div style="background:rgba(0,0,0,0.15); backdrop-filter:blur(10px); padding:16px; border-radius:12px; margin-bottom:16px; border:1px solid rgba(125,125,125,0.2);">
+                    <div style="font-weight:bold; margin-bottom:10px; color:var(--text-main);">Q${qIdx+1}. ${q.question}</div>
+                    <div>
+                        ${q.options.map((opt, oIdx) => `
+                            <label style="display:block; padding:8px 12px; background:var(--btn-item-bg); margin-bottom:6px; border-radius:8px; cursor:pointer;">
+                                <input type="radio" name="q_${qIdx}" value="${oIdx}" style="width:auto; margin-right:8px;"> ${opt}
+                            </label>
+                        `).join('')}
+                    </div>
+                    <button class="btn-ui btn-secondary" style="margin-top:8px; padding:4px 10px; font-size:12px;" onclick="checkAnswer(${qIdx}, ${q.answer_index}, '${q.explanation}')">정답 확인</button>
+                    <div id="quiz-result-${qIdx}" style="margin-top:8px; font-size:13px;"></div>
+                </div>
+            `).join('');
+        }
+
+        function checkAnswer(qIdx, correctIdx, explanation) {
+            const selected = document.querySelector(`input[name="q_${qIdx}"]:checked`);
+            const resDiv = document.getElementById(`quiz-result-${qIdx}`);
+            if (!selected) return showNotification("답을 선택해주세요!");
+
+            if (parseInt(selected.value) === correctIdx) {
+                resDiv.innerHTML = `<span style="color:#4ade80; font-weight:bold;">⭕ 정답입니다!</span><br/><span style="color:var(--text-sub);">${explanation}</span>`;
+            } else {
+                resDiv.innerHTML = `<span style="color:#f87171; font-weight:bold;">❌ 오답입니다.</span><br/><span style="color:var(--text-sub);">${explanation}</span>`;
+            }
+        }
+
+        async function saveQuizConfig() {
+            const difficulty = document.getElementById('quiz-difficulty').value;
+            const count = parseInt(document.getElementById('quiz-count').value);
+
+            const res = await fetch('/api/admin/quiz_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ difficulty, count })
+            });
+
+            if (res.ok) {
+                showNotification("퀴즈 설정이 저장되었습니다.");
+                syncSystemState();
+            }
         }
 
         function maskId(idStr) {
@@ -1598,6 +1572,7 @@ def get_state():
         "user": user,
         "role": role,
         "manuals": data.get("manuals", []),
+        "quiz_config": data.get("quiz_config", {"difficulty": "medium", "count": 3}),
         "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
         "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
         "admin_whitelist": data.get("admin_whitelist", []) if role == "admin" else [],
@@ -1785,6 +1760,97 @@ def admin_permission_batch():
     add_log(data, "일괄 권한 변경", user_name, f"유저 {len(user_ids)}명에 대해 '{action}' 처리 수행")
     save_data(data)
     return jsonify({"status": "success"})
+
+@app.route("/api/admin/quiz_config", methods=["POST"])
+def admin_quiz_config():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
+
+    req_data = request.json or {}
+    difficulty = req_data.get("difficulty", "medium")
+    count = req_data.get("count", 3)
+
+    data["quiz_config"] = {
+        "difficulty": difficulty,
+        "count": count
+    }
+    
+    user_name = user.get("global_name") or user.get("username")
+    add_log(data, "퀴즈 설정", user_name, f"퀴즈 설정 변경 (난이도: {difficulty}, 문제수: {count})")
+    save_data(data)
+    return jsonify({"status": "success"})
+
+@app.route("/api/quiz/generate", methods=["POST"])
+def generate_quiz():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    req_data = request.json or {}
+    manual_idx = req_data.get("manual_index", 0)
+
+    manuals = data.get("manuals", [])
+    if manual_idx >= len(manuals):
+        manual_idx = 0
+
+    target_manual = manuals[manual_idx] if manuals else {"title": "기본", "content": "내용 없음"}
+    quiz_config = data.get("quiz_config", {"difficulty": "medium", "count": 3})
+
+    if not OPENAI_API_KEY:
+        return jsonify({
+            "questions": [
+                {
+                    "question": f"[{target_manual.get('title')}] 본 매뉴얼의 핵심 지침으로 올바른 것은 무엇입니까?",
+                    "options": ["외부 유출 허용", "무단 캡처 금지 및 보안 유지", "계정 공유 권장", "로그 기록 비활성화"],
+                    "answer_index": 1,
+                    "explanation": "매뉴얼 지침에 따라 시스템 정보 유출 및 무단 캡처는 엄격히 금지됩니다."
+                }
+            ]
+        })
+
+    try:
+        prompt = f"""
+다음 매뉴얼 내용을 바탕으로 {quiz_config['count']}개의 객관식 퀴즈 문제를 생성하세요.
+난이도: {quiz_config['difficulty']}
+
+[매뉴얼 제목]: {target_manual.get('title')}
+[매뉴얼 내용]: {target_manual.get('content')}
+
+반드시 JSON 형식을 지켜서 응답하세요:
+{{
+  "questions": [
+    {{
+      "question": "질문 내용",
+      "options": ["보기1", "보기2", "보기3", "보기4"],
+      "answer_index": 0,
+      "explanation": "해설 내용"
+    }}
+  ]
+}}
+"""
+        res = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"}
+            },
+            timeout=15
+        )
+        if res.status_code == 200:
+            result_json = json.loads(res.json()['choices'][0]['message']['content'])
+            return jsonify(result_json)
+        else:
+            return jsonify({"error": "AI API 호출 실패"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
