@@ -1,19 +1,23 @@
-import os
-import json
 import base64
 import datetime
+import json
+import math
+import os
 import random
-from flask import Flask, request, render_template_string, redirect, session, jsonify
+import sys
+from datetime import datetime as dt
+from flask import Flask, jsonify, redirect, render_template_string, request, session
+import pygame
 import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+# ==========================================
+# 1. Flask 웹 애플리케이션 및 설정
+# ==========================================
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = os.urandom(24)
 
-# ==========================================
-# ⚙️ 설정 및 환경 변수
-# ==========================================
 CLIENT_ID = "1534184089144266872"
 CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm")
 BASE_URL = "https://sky-aurora-staff.onrender.com"
@@ -27,7 +31,7 @@ GITHUB_REPO = os.environ.get("GITHUB_REPO")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # --------------------------------------------------
-# 📁 데이터 불러오기 및 영구 저장 로직
+# 데이터 불러오기 및 저장 로직
 # --------------------------------------------------
 def load_data():
     if GITHUB_TOKEN and GITHUB_REPO:
@@ -92,7 +96,6 @@ def save_data(data):
             json_str = json.dumps(data, ensure_ascii=False, indent=2)
             encoded_content = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
             
-            # KST 시간 기준 저장 로깅
             now_kst = (datetime.datetime.utcnow() + datetime.timedelta(hours=9)).strftime('%Y-%m-%d %H:%M:%S')
             payload = {
                 "message": f"Auto-sync manual data [{now_kst} KST]",
@@ -113,7 +116,7 @@ def add_log(data, category, user_name, action, device_type="PC"):
     data["logs"].insert(0, log_entry)
 
 # --------------------------------------------------
-# 🎨 프론트엔드 UI/UX
+# HTML 템플릿
 # --------------------------------------------------
 MAIN_HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -272,7 +275,6 @@ MAIN_HTML_TEMPLATE = """
         .doc-title-text::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
         .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); background: rgba(0, 0, 0, 0.15); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
 
-        /* 동영상 미리보기 박스 스타일 */
         .video-embed-box { margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px; border: 1px solid rgba(0, 255, 170, 0.3); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
         .video-embed-box iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
 
@@ -846,7 +848,6 @@ MAIN_HTML_TEMPLATE = """
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
 
-        // 미리보기 토글 상태 관리
         let embedPreviewEnabled = localStorage.getItem('sky_embed_preview') !== 'false';
 
         function toggleEmbedPreview(enabled) {
@@ -855,7 +856,6 @@ MAIN_HTML_TEMPLATE = """
             renderCategorizedSidebar();
         }
 
-        // 유튜브 링크 처리 및 임베드 변환 헬퍼 함수
         function processYoutubeEmbeds(content, enablePreview) {
             if (!content) return '';
             
@@ -1018,7 +1018,6 @@ MAIN_HTML_TEMPLATE = """
                 const current = appState.manuals[selectedManualIndex] || appState.manuals[0];
                 document.getElementById('doc-title').innerText = `${current.pinned ? '📌 ' : ''}${current.title}`;
                 
-                // 유튜브 및 미디어 링크 미리보기 변환 로직 적용
                 const processedContent = processYoutubeEmbeds(current.content, embedPreviewEnabled);
                 document.getElementById('doc-body').innerHTML = processedContent;
             }
@@ -1435,9 +1434,9 @@ MAIN_HTML_TEMPLATE = """
 
         async function updatePermission(target, action, explicitId = null) {
             const userId = explicitId || document.getElementById('perm-target-id').value.trim();
-            const isAdmin = document.getElementById('perm-is-admin').checked;
+            const isAdmin = document.getElementById('perm-is-admin') ? document.getElementById('perm-is-admin').checked : false;
 
-            if (!userId) return showNotification("디스코드 유저 ID를 입력해주세요.");
+            if (!userId) return showNotification("대상 디스코드 ID를 입력해주세요.");
 
             const res = await fetch('/api/admin/permission', {
                 method: 'POST',
@@ -1446,381 +1445,678 @@ MAIN_HTML_TEMPLATE = """
             });
 
             if (res.ok) {
-                showNotification(`권한 변경 완료: ${target} (${action})`);
-                if (!explicitId) {
-                    document.getElementById('perm-target-id').value = '';
-                    document.getElementById('searched-user-card').style.display = 'none';
-                }
+                showNotification("권한 설정이 업데이트되었습니다.");
+                if (!explicitId) document.getElementById('perm-target-id').value = '';
                 syncSystemState();
             }
         }
 
-        window.onload = syncSystemState;
+        syncSystemState();
     </script>
 </body>
 </html>
 """
 
 # --------------------------------------------------
-# 🛣️ Flask 라우트 정의
+# Flask 라우트 정의
 # --------------------------------------------------
-@app.route("/")
+@app.route('/')
 def index():
     return render_template_string(MAIN_HTML_TEMPLATE, client_id=CLIENT_ID)
 
-@app.route("/callback")
+@app.route('/callback')
 def callback():
-    code = request.args.get("code")
+    code = request.args.get('code')
     if not code:
-        return redirect("/")
+        return redirect('/')
 
-    redirect_uri = f"{BASE_URL}/callback"
+    token_url = "https://discord.com/api/oauth2/token"
+    data = {
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': f"{BASE_URL}/callback"
+    }
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    res = requests.post(token_url, data=data, headers=headers)
     
-    token_res = requests.post("https://discord.com/api/oauth2/token", data={
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": redirect_uri
-    }, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    if res.status_code == 200:
+        token_data = res.json()
+        access_token = token_data.get('access_token')
 
-    if token_res.status_code != 200:
-        return redirect("/")
+        user_res = requests.get("https://discord.com/api/users/@me", headers={'Authorization': f'Bearer {access_token}'})
+        if user_res.status_code == 200:
+            user_info = user_res.json()
+            session['user'] = user_info
+            
+            db = load_data()
+            user_id = user_info['id']
+            avatar_hash = user_info.get('avatar')
+            avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png" if avatar_hash else "https://cdn.discordapp.com/embed/avatars/0.png"
+            
+            db.setdefault("user_profiles", {})[user_id] = {
+                "id": user_id,
+                "username": user_info.get("username"),
+                "global_name": user_info.get("global_name") or user_info.get("username"),
+                "avatar_url": avatar_url
+            }
+            
+            user_name = user_info.get('global_name') or user_info.get('username')
+            add_log(db, "인증", user_name, f"디스코드 로그인 완료 (ID: {user_id})")
+            save_data(db)
 
-    access_token = token_res.json().get("access_token")
-    user_res = requests.get("https://discord.com/api/users/@me", headers={
-        "Authorization": f"Bearer {access_token}"
-    })
+    return redirect('/')
 
-    if user_res.status_code == 200:
-        session["user"] = user_res.json()
-        
-        data = load_data()
-        user_id = str(session["user"]["id"])
-        user_name = session["user"].get("global_name") or session["user"].get("username")
-        
-        if "user_profiles" not in data: data["user_profiles"] = {}
-        data["user_profiles"][user_id] = {
-            "username": session["user"].get("username"),
-            "global_name": session["user"].get("global_name") or session["user"].get("username"),
-            "avatar_url": f"https://cdn.discordapp.com/avatars/{user_id}/{session['user'].get('avatar')}.png" if session["user"].get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
-        }
-
-        add_log(data, "인증", user_name, f"시스템 로그인 성공 (ID: {user_id})")
-        save_data(data)
-
-    return redirect("/")
-
-@app.route("/logout")
+@app.route('/logout')
 def logout():
-    session.clear()
-    return redirect("/")
+    session.pop('user', None)
+    return redirect('/')
 
-@app.route("/api/state")
+@app.route('/api/state')
 def get_state():
-    user = session.get("user")
+    user = session.get('user')
     if not user:
-        return jsonify({"status": "unauthorized"}), 200
+        return jsonify({"status": "unauthorized"})
 
-    data = load_data()
-    user_id = str(user.get("id"))
+    db = load_data()
+    user_id = user['id']
 
-    if user_id in data.get("user_blacklist", []):
-        session.clear()
-        return jsonify({"error": "blacklisted"}), 403
+    if user_id in db.get("user_blacklist", []):
+        session.pop('user', None)
+        return jsonify({"status": "forbidden", "message": "Blacklisted"}), 403
 
     role = "guest"
-    if user_id in data.get("admin_whitelist", DEFAULT_ADMINS):
+    if user_id in db.get("admin_whitelist", []):
         role = "admin"
-    elif user_id in data.get("user_whitelist", []):
+    elif user_id in db.get("user_whitelist", []):
         role = "staff"
-    else:
-        session.clear()
-        return jsonify({"error": "not_authorized"}), 403
 
     return jsonify({
+        "status": "success",
         "user": user,
         "role": role,
-        "manuals": data.get("manuals", []),
-        "quiz_config": data.get("quiz_config", {"difficulty": "medium", "count": 3}),
-        "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
-        "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
-        "admin_whitelist": data.get("admin_whitelist", []) if role == "admin" else [],
-        "user_profiles": data.get("user_profiles", {}),
-        "logs": data.get("logs", []) if role == "admin" else []
+        "manuals": db.get("manuals", []),
+        "user_whitelist": db.get("user_whitelist", []),
+        "user_blacklist": db.get("user_blacklist", []),
+        "admin_whitelist": db.get("admin_whitelist", []),
+        "user_profiles": db.get("user_profiles", {}),
+        "logs": db.get("logs", [])[:50],
+        "quiz_config": db.get("quiz_config", {"difficulty": "medium", "count": 3})
     })
 
-@app.route("/api/admin/user_info/<user_id>")
-def get_user_info(user_id):
-    user = session.get("user")
+@app.route('/api/log/action', methods=['POST'])
+def log_action():
+    user = session.get('user')
     if not user:
-        return jsonify({"error": "unauthorized"}), 401
+        return jsonify({"status": "unauthorized"}), 401
 
-    data = load_data()
-    profiles = data.get("user_profiles", {})
+    req_data = request.json or {}
+    action = req_data.get('action', '알 수 없는 작업')
+    device = req_data.get('device', 'PC')
 
+    db = load_data()
+    user_name = user.get('global_name') or user.get('username')
+    add_log(db, "보안감시", user_name, action, device)
+    save_data(db)
+
+    return jsonify({"status": "success"})
+
+@app.route('/api/admin/manual', methods=['POST'])
+def save_manual():
+    user = session.get('user')
+    if not user:
+        return jsonify({"status": "unauthorized"}), 401
+
+    db = load_data()
+    if user['id'] not in db.get("admin_whitelist", []):
+        return jsonify({"status": "forbidden"}), 403
+
+    req = request.json
+    index = req.get('index', -1)
+    category = req.get('category', '공통 매뉴얼')
+    pinned = req.get('pinned', False)
+    title = req.get('title')
+    content = req.get('content')
+
+    manuals = db.get("manuals", [])
+    
+    if 0 <= index < len(manuals):
+        manuals[index] = {
+            "id": manuals[index].get("id", len(manuals) + 1),
+            "category": category,
+            "pinned": pinned,
+            "title": title,
+            "content": content
+        }
+        action_msg = f"매뉴얼 수정 [{title}]"
+    else:
+        new_id = max([m.get("id", 0) for m in manuals], default=0) + 1
+        manuals.append({
+            "id": new_id,
+            "category": category,
+            "pinned": pinned,
+            "title": title,
+            "content": content
+        })
+        action_msg = f"새 매뉴얼 등록 [{title}]"
+
+    db["manuals"] = manuals
+    user_name = user.get('global_name') or user.get('username')
+    add_log(db, "매뉴얼", user_name, action_msg)
+    save_data(db)
+
+    return jsonify({"status": "success"})
+
+@app.route('/api/admin/manual/delete', methods=['POST'])
+def delete_manual():
+    user = session.get('user')
+    if not user:
+        return jsonify({"status": "unauthorized"}), 401
+
+    db = load_data()
+    if user['id'] not in db.get("admin_whitelist", []):
+        return jsonify({"status": "forbidden"}), 403
+
+    index = request.json.get('index', -1)
+    manuals = db.get("manuals", [])
+
+    if 0 <= index < len(manuals):
+        deleted = manuals.pop(index)
+        db["manuals"] = manuals
+        user_name = user.get('global_name') or user.get('username')
+        add_log(db, "매뉴얼", user_name, f"매뉴얼 삭제 [{deleted.get('title')}]")
+        save_data(db)
+        return jsonify({"status": "success"})
+
+    return jsonify({"status": "invalid_index"}), 400
+
+@app.route('/api/admin/permission', methods=['POST'])
+def update_permission():
+    user = session.get('user')
+    if not user:
+        return jsonify({"status": "unauthorized"}), 401
+
+    db = load_data()
+    if user['id'] not in db.get("admin_whitelist", []):
+        return jsonify({"status": "forbidden"}), 403
+
+    req = request.json
+    target = req.get('target')
+    action = req.get('action')
+    target_user_id = str(req.get('user_id')).strip()
+    is_admin = req.get('is_admin', False)
+
+    wl = db.get("user_whitelist", [])
+    bl = db.get("user_blacklist", [])
+    al = db.get("admin_whitelist", [])
+
+    if target == 'whitelist':
+        if action == 'add':
+            if target_user_id not in wl:
+                wl.append(target_user_id)
+            if target_user_id in bl:
+                bl.remove(target_user_id)
+            if is_admin and target_user_id not in al:
+                al.append(target_user_id)
+            elif not is_admin and target_user_id in al and target_user_id not in DEFAULT_ADMINS:
+                al.remove(target_user_id)
+        elif action == 'remove':
+            if target_user_id in wl:
+                wl.remove(target_user_id)
+            if target_user_id in al and target_user_id not in DEFAULT_ADMINS:
+                al.remove(target_user_id)
+
+    elif target == 'blacklist':
+        if action == 'add':
+            if target_user_id not in bl:
+                bl.append(target_user_id)
+            if target_user_id in wl:
+                wl.remove(target_user_id)
+            if target_user_id in al and target_user_id not in DEFAULT_ADMINS:
+                al.remove(target_user_id)
+        elif action == 'remove':
+            if target_user_id in bl:
+                bl.remove(target_user_id)
+
+    db["user_whitelist"] = wl
+    db["user_blacklist"] = bl
+    db["admin_whitelist"] = al
+
+    user_name = user.get('global_name') or user.get('username')
+    add_log(db, "권한변경", user_name, f"권한 업데이트 -> 대상 ID: {target_user_id} ({target}:{action})")
+    save_data(db)
+
+    return jsonify({"status": "success"})
+
+@app.route('/api/admin/permission/batch', methods=['POST'])
+def batch_permission():
+    user = session.get('user')
+    if not user:
+        return jsonify({"status": "unauthorized"}), 401
+
+    db = load_data()
+    if user['id'] not in db.get("admin_whitelist", []):
+        return jsonify({"status": "forbidden"}), 403
+
+    req = request.json
+    user_ids = req.get('user_ids', [])
+    action = req.get('action')
+
+    wl = db.get("user_whitelist", [])
+    bl = db.get("user_blacklist", [])
+    al = db.get("admin_whitelist", [])
+
+    for uid in user_ids:
+        uid = str(uid).strip()
+        if action == 'admin_upgrade':
+            if uid not in al:
+                al.append(uid)
+            if uid not in wl:
+                wl.append(uid)
+            if uid in bl:
+                bl.remove(uid)
+        elif action == 'admin_demote':
+            if uid in al and uid not in DEFAULT_ADMINS:
+                al.remove(uid)
+        elif action == 'blacklist':
+            if uid not in bl:
+                bl.append(uid)
+            if uid in wl:
+                wl.remove(uid)
+            if uid in al and uid not in DEFAULT_ADMINS:
+                al.remove(uid)
+        elif action == 'remove':
+            if uid in wl:
+                wl.remove(uid)
+            if uid in bl:
+                bl.remove(uid)
+            if uid in al and uid not in DEFAULT_ADMINS:
+                al.remove(uid)
+
+    db["user_whitelist"] = wl
+    db["user_blacklist"] = bl
+    db["admin_whitelist"] = al
+
+    user_name = user.get('global_name') or user.get('username')
+    add_log(db, "권한변경", user_name, f"일괄 권한 변경 실행 ({action}) -> {len(user_ids)}명 대상")
+    save_data(db)
+
+    return jsonify({"status": "success"})
+
+@app.route('/api/admin/user_info/<user_id>')
+def get_user_info(user_id):
+    user = session.get('user')
+    if not user:
+        return jsonify({"status": "unauthorized"}), 401
+
+    db = load_data()
+    if user['id'] not in db.get("admin_whitelist", []):
+        return jsonify({"status": "forbidden"}), 403
+
+    profiles = db.get("user_profiles", {})
     if user_id in profiles:
-        prof = profiles[user_id]
-        return jsonify({"id": user_id, "username": prof.get("username"), "global_name": prof.get("global_name"), "avatar_url": prof.get("avatar_url")})
+        return jsonify(profiles[user_id])
+
+    bot_token = os.environ.get("DISCORD_BOT_TOKEN")
+    if bot_token:
+        headers = {"Authorization": f"Bot {bot_token}"}
+        res = requests.get(f"https://discord.com/api/v10/users/{user_id}", headers=headers)
+        if res.status_code == 200:
+            u = res.json()
+            avatar_hash = u.get("avatar")
+            avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png" if avatar_hash else "https://cdn.discordapp.com/embed/avatars/0.png"
+            prof = {
+                "id": user_id,
+                "username": u.get("username"),
+                "global_name": u.get("global_name") or u.get("username"),
+                "avatar_url": avatar_url
+            }
+            profiles[user_id] = prof
+            db["user_profiles"] = profiles
+            save_data(db)
+            return jsonify(prof)
 
     return jsonify({
         "id": user_id,
-        "username": f"user_{user_id[-4:]}",
-        "global_name": f"스태프 ({user_id[-4:]})",
+        "username": "Unknown User",
+        "global_name": "미확인 유저",
         "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png"
     })
 
-@app.route("/api/log/action", methods=["POST"])
-def log_action():
-    user = session.get("user")
+@app.route('/api/admin/quiz_config', methods=['POST'])
+def set_quiz_config():
+    user = session.get('user')
     if not user:
-        return jsonify({"status": "ignored"}), 200
+        return jsonify({"status": "unauthorized"}), 401
 
-    data = load_data()
-    req_data = request.json or {}
-    action = req_data.get("action", "알 수 없는 행동")
-    device = req_data.get("device", "PC")
-    user_name = user.get("global_name") or user.get("username")
+    db = load_data()
+    if user['id'] not in db.get("admin_whitelist", []):
+        return jsonify({"status": "forbidden"}), 403
 
-    add_log(data, "보안 감지", user_name, action, device_type=device)
-    save_data(data)
-    return jsonify({"status": "logged"})
-
-@app.route("/api/admin/manual", methods=["POST"])
-def admin_manual():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
-
-    req_data = request.json or {}
-    idx = req_data.get("index")
-    category = req_data.get("category", "공통 매뉴얼")
-    pinned = req_data.get("pinned", False)
-    title = req_data.get("title")
-    content = req_data.get("content")
-
-    user_name = user.get("global_name") or user.get("username")
-    manual_item = {
-        "id": int(datetime.datetime.now().timestamp()),
-        "category": category,
-        "pinned": pinned,
-        "title": title,
-        "content": content
+    req = request.json
+    db["quiz_config"] = {
+        "difficulty": req.get("difficulty", "medium"),
+        "count": int(req.get("count", 3))
     }
-
-    if idx is not None and 0 <= idx < len(data["manuals"]):
-        data["manuals"][idx] = manual_item
-        add_log(data, "매뉴얼 수정", user_name, f"매뉴얼 '{title}' 수정 완료")
-    else:
-        data["manuals"].append(manual_item)
-        add_log(data, "매뉴얼 등록", user_name, f"새 매뉴얼 '{title}' 등록 완료")
-
-    save_data(data)
+    save_data(db)
     return jsonify({"status": "success"})
 
-@app.route("/api/admin/manual/delete", methods=["POST"])
-def admin_manual_delete():
-    user = session.get("user")
+@app.route('/api/quiz/generate', methods=['POST'])
+def generate_quiz_api():
+    user = session.get('user')
     if not user:
-        return jsonify({"error": "unauthorized"}), 401
+        return jsonify({"status": "unauthorized"}), 401
 
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
+    db = load_data()
+    req = request.json
+    idx = req.get("manual_index", 0)
+    manuals = db.get("manuals", [])
 
-    idx = request.json.get("index")
-    if idx is not None and 0 <= idx < len(data["manuals"]):
-        deleted = data["manuals"].pop(idx)
-        user_name = user.get("global_name") or user.get("username")
-        add_log(data, "매뉴얼 삭제", user_name, f"매뉴얼 '{deleted.get('title')}' 삭제 완료")
-        save_data(data)
+    if not (0 <= idx < len(manuals)):
+        return jsonify({"status": "invalid_manual"}), 400
 
-    return jsonify({"status": "success"})
-
-@app.route("/api/admin/permission", methods=["POST"])
-def admin_permission():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
-
-    target = request.json.get("target")
-    action = request.json.get("action")
-    target_id = str(request.json.get("user_id"))
-    is_admin = request.json.get("is_admin", False)
-
-    if target == "whitelist":
-        if action == "add":
-            if "user_whitelist" not in data: data["user_whitelist"] = []
-            if target_id not in data["user_whitelist"]:
-                data["user_whitelist"].append(target_id)
-            if "user_blacklist" in data and target_id in data["user_blacklist"]:
-                data["user_blacklist"].remove(target_id)
-
-            if is_admin:
-                if "admin_whitelist" not in data: data["admin_whitelist"] = []
-                if target_id not in data["admin_whitelist"]:
-                    data["admin_whitelist"].append(target_id)
-
-        elif action == "remove":
-            if "user_whitelist" in data and target_id in data["user_whitelist"]:
-                data["user_whitelist"].remove(target_id)
-
-    elif target == "blacklist":
-        if action == "add":
-            if "user_blacklist" not in data: data["user_blacklist"] = []
-            if target_id not in data["user_blacklist"]:
-                data["user_blacklist"].append(target_id)
-            if "user_whitelist" in data and target_id in data["user_whitelist"]:
-                data["user_whitelist"].remove(target_id)
-            if "admin_whitelist" in data and target_id in data["admin_whitelist"] and target_id not in DEFAULT_ADMINS:
-                data["admin_whitelist"].remove(target_id)
-
-        elif action == "remove":
-            if "user_blacklist" in data and target_id in data["user_blacklist"]:
-                data["user_blacklist"].remove(target_id)
-
-    save_data(data)
-    return jsonify({"status": "success"})
-
-@app.route("/api/admin/permission/batch", methods=["POST"])
-def admin_permission_batch():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
-
-    user_ids = request.json.get("user_ids", [])
-    action = request.json.get("action")
-    user_name = user.get("global_name") or user.get("username")
-
-    for uid in user_ids:
-        uid = str(uid)
-        if action == "admin_upgrade":
-            if uid not in data.get("admin_whitelist", []):
-                data.setdefault("admin_whitelist", []).append(uid)
-            if uid not in data.get("user_whitelist", []):
-                data.setdefault("user_whitelist", []).append(uid)
-        elif action == "admin_demote":
-            if uid in data.get("admin_whitelist", []) and uid not in DEFAULT_ADMINS:
-                data["admin_whitelist"].remove(uid)
-        elif action == "blacklist":
-            if uid not in data.get("user_blacklist", []):
-                data.setdefault("user_blacklist", []).append(uid)
-            if uid in data.get("user_whitelist", []):
-                data["user_whitelist"].remove(uid)
-            if uid in data.get("admin_whitelist", []) and uid not in DEFAULT_ADMINS:
-                data["admin_whitelist"].remove(uid)
-        elif action == "remove":
-            if uid in data.get("user_whitelist", []):
-                data["user_whitelist"].remove(uid)
-            if uid in data.get("blacklist", []):
-                data["user_blacklist"].remove(uid)
-
-    add_log(data, "일괄 권한 변경", user_name, f"유저 {len(user_ids)}명에 대해 '{action}' 처리 수행")
-    save_data(data)
-    return jsonify({"status": "success"})
-
-@app.route("/api/admin/quiz_config", methods=["POST"])
-def admin_quiz_config():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = load_data()
-    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-        return jsonify({"error": "forbidden"}), 403
-
-    req_data = request.json or {}
-    difficulty = req_data.get("difficulty", "medium")
-    count = req_data.get("count", 3)
-
-    data["quiz_config"] = {
-        "difficulty": difficulty,
-        "count": count
-    }
-    
-    user_name = user.get("global_name") or user.get("username")
-    add_log(data, "퀴즈 설정", user_name, f"퀴즈 설정 변경 (난이도: {difficulty}, 문제수: {count})")
-    save_data(data)
-    return jsonify({"status": "success"})
-
-@app.route("/api/quiz/generate", methods=["POST"])
-def generate_quiz():
-    user = session.get("user")
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = load_data()
-    req_data = request.json or {}
-    manual_idx = req_data.get("manual_index", 0)
-
-    manuals = data.get("manuals", [])
-    if manual_idx >= len(manuals):
-        manual_idx = 0
-
-    target_manual = manuals[manual_idx] if manuals else {"title": "기본", "content": "내용 없음"}
-    quiz_config = data.get("quiz_config", {"difficulty": "medium", "count": 3})
+    target_manual = manuals[idx]
+    config = db.get("quiz_config", {"difficulty": "medium", "count": 3})
 
     if not OPENAI_API_KEY:
-        return jsonify({
-            "questions": [
-                {
-                    "question": f"[{target_manual.get('title')}] 본 매뉴얼의 핵심 지침으로 올바른 것은 무엇입니까?",
-                    "options": ["외부 유출 허용", "무단 캡처 금지 및 보안 유지", "계정 공유 권장", "로그 기록 비활성화"],
-                    "answer_index": 1,
-                    "explanation": "매뉴얼 지침에 따라 시스템 정보 유출 및 무단 캡처는 엄격히 금지됩니다."
-                }
-            ]
-        })
+        return jsonify({"status": "no_openai_key"}), 500
 
-    try:
-        prompt = f"""
-다음 매뉴얼 내용을 바탕으로 {quiz_config['count']}개의 객관식 퀴즈 문제를 생성하세요.
-난이도: {quiz_config['difficulty']}
+    prompt = f"""
+다음 매뉴얼 내용을 기반으로 이해도 점검 퀴즈 {config['count']}문제를 생성해 주세요.
+난이도: {config['difficulty']}
 
-[매뉴얼 제목]: {target_manual.get('title')}
-[매뉴얼 내용]: {target_manual.get('content')}
+[매뉴얼 내용]
+제목: {target_manual.get('title')}
+내용: {target_manual.get('content')}
 
-반드시 JSON 형식을 지켜서 응답하세요:
-{{
-  "questions": [
-    {{
-      "question": "질문 내용",
-      "options": ["보기1", "보기2", "보기3", "보기4"],
-      "answer_index": 0,
-      "explanation": "해설 내용"
-    }}
-  ]
-}}
+응답은 반드시 아래 형식의 JSON 배열 객체로만 출력하세요. 다른 텍스트는 포함하지 마세요.
+[
+  {{
+    "question": "문제 내용",
+    "options": ["보기1", "보기2", "보기3", "보기4"],
+    "answer_index": 0,
+    "explanation": "해설 내용"
+  }}
+]
 """
-        res = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": prompt}],
-                "response_format": {"type": "json_object"}
-            },
-            timeout=15
-        )
+    try:
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7
+        }
+        res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=15)
         if res.status_code == 200:
-            result_json = json.loads(res.json()['choices'][0]['message']['content'])
-            return jsonify(result_json)
+            result_text = res.json()['choices'][0]['message']['content'].strip()
+            if result_text.startswith("```json"):
+                result_text = result_text.replace("```json", "").replace("```", "").strip()
+            questions = json.loads(result_text)
+            return jsonify({"status": "success", "questions": questions})
         else:
-            return jsonify({"error": "AI API 호출 실패"}), 500
+            return jsonify({"status": "openai_error", "details": res.text}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
+
+# ==========================================
+# 2. Pygame 인터랙티브 보드 그래픽 클래스
+# ==========================================
+class FlipTile:
+    def __init__(self, x, y, w, h, font):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.current_char = ""
+        self.target_char = ""
+        self.flip_progress = 1.0
+        self.font = font
+
+    def set_char(self, char):
+        if self.target_char != char:
+            self.target_char = char
+            self.flip_progress = 0.0
+
+    def update(self):
+        if self.flip_progress < 1.0:
+            self.flip_progress += 0.25
+            if self.flip_progress >= 0.5 and self.current_char != self.target_char:
+                self.current_char = self.target_char
+            if self.flip_progress >= 1.0:
+                self.flip_progress = 1.0
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, (20, 22, 28), self.rect, border_radius=4)
+        pygame.draw.rect(surface, (45, 50, 60), self.rect, 1, border_radius=4)
+
+        cy = self.rect.centery
+        pygame.draw.line(surface, (10, 10, 12), (self.rect.left, cy), (self.rect.right, cy), 1)
+
+        if self.current_char:
+            txt = self.font.render(self.current_char, True, (240, 240, 240))
+            txt_rect = txt.get_rect(center=self.rect.center)
+            surface.blit(txt, txt_rect)
+
+
+class ToggleSwitch:
+    def __init__(self, x, y, width=64, height=32):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.is_night = True
+        self.handle_x = x + width - height / 2
+        self.target_x = self.handle_x
+        self.radius = (height - 6) // 2
+
+    def toggle(self):
+        self.is_night = not self.is_night
+        if self.is_night:
+            self.target_x = self.rect.x + self.rect.width - self.rect.height / 2
+        else:
+            self.target_x = self.rect.x + self.rect.height / 2
+
+    def update(self):
+        self.handle_x += (self.target_x - self.handle_x) * 0.3
+
+    def draw(self, surface):
+        bg_color = (35, 40, 55) if self.is_night else (180, 210, 240)
+        handle_color = (240, 240, 250) if self.is_night else (255, 190, 40)
+
+        pygame.draw.rect(surface, bg_color, self.rect, border_radius=16)
+        pygame.draw.rect(surface, (80, 90, 110), self.rect, 2, border_radius=16)
+        pygame.draw.circle(
+            surface,
+            handle_color,
+            (int(self.handle_x), self.rect.centery),
+            self.radius
+        )
+
+
+class Star:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.x = random.randint(0, width)
+        self.y = random.randint(0, int(height * 0.65))
+        self.base_brightness = random.randint(100, 255)
+        self.brightness = self.base_brightness
+        self.twinkle_speed = random.uniform(0.03, 0.09)
+        self.phase = random.uniform(0, math.pi * 2)
+
+    def update(self):
+        self.phase += self.twinkle_speed
+        self.brightness = int(130 + 125 * math.sin(self.phase) * (self.base_brightness / 255))
+
+
+class ShootingStar:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.reset()
+
+    def reset(self):
+        self.x = random.randint(0, self.width)
+        self.y = random.randint(-40, int(self.height * 0.3))
+        self.length = random.randint(70, 130)
+        self.speed = random.uniform(10, 18)
+        self.angle = math.radians(random.uniform(35, 50))
+        self.active = False
+        self.alpha = 255
+
+    def spawn(self):
+        if not self.active and random.random() < 0.07:
+            self.reset()
+            self.active = True
+
+    def update(self):
+        if self.active:
+            self.x += math.cos(self.angle) * self.speed
+            self.y += math.sin(self.angle) * self.speed
+            self.alpha -= 5
+            if self.alpha <= 0 or self.x > self.width or self.y > self.height * 0.7:
+                self.active = False
+
+    def draw(self, surface):
+        if self.active:
+            end_x = self.x - math.cos(self.angle) * self.length
+            end_y = self.y - math.sin(self.angle) * self.length
+
+            s = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            pygame.draw.line(s, (255, 255, 200, max(0, self.alpha)), (self.x, self.y), (end_x, end_y), 2)
+            pygame.draw.circle(s, (255, 255, 255, max(0, self.alpha)), (int(self.x), int(self.y)), 3)
+            surface.blit(s, (0, 0))
+
+
+# ==========================================
+# 3. Pygame 루프 실행 함수
+# ==========================================
+def run_pygame():
+    pygame.init()
+    pygame.font.init()
+
+    WIDTH, HEIGHT = 1000, 750
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Interactive Board")
+    clock = pygame.time.Clock()
+
+    FONT_FLIP = pygame.font.SysFont("arial", 20, bold=True)
+
+    stars = [Star(WIDTH, HEIGHT) for _ in range(85)]
+    shooting_star = ShootingStar(WIDTH, HEIGHT)
+    toggle = ToggleSwitch(WIDTH - 90, 20)
+
+    time_tiles = [FlipTile(30 + i * 26, HEIGHT - 55, 22, 34, FONT_FLIP) for i in range(19)]
+
+    aurora_time = 0.0
+    running = True
+
+    while running:
+        dt = clock.tick(60) / 1000.0
+        aurora_time += dt
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if toggle.rect.collidepoint(event.pos):
+                    toggle.toggle()
+
+        toggle.update()
+        is_night = toggle.is_night
+
+        if is_night:
+            screen.fill((10, 12, 22))
+
+            aurora_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            for i in range(3):
+                points = []
+                base_y = 90 + i * 35
+                for x in range(0, WIDTH + 20, 20):
+                    y = (
+                        base_y
+                        + math.sin(x * 0.007 + aurora_time * 2.8 + i) * 40
+                        + math.cos(x * 0.014 - aurora_time * 2.0) * 25
+                    )
+                    points.append((x, y))
+                points.append((WIDTH, HEIGHT * 0.6))
+                points.append((0, HEIGHT * 0.6))
+
+                color = (0, 255, 150, 40) if i % 2 == 0 else (130, 70, 255, 30)
+                pygame.draw.polygon(aurora_surface, color, points)
+            screen.blit(aurora_surface, (0, 0))
+
+            for star in stars:
+                star.update()
+                pygame.draw.circle(
+                    screen,
+                    (star.brightness, star.brightness, star.brightness),
+                    (star.x, star.y),
+                    2 if star.brightness > 200 else 1
+                )
+
+            for i in range(len(stars)):
+                for j in range(i + 1, len(stars)):
+                    dx = stars[i].x - stars[j].x
+                    dy = stars[i].y - stars[j].y
+                    dist = math.hypot(dx, dy)
+                    if dist < 65 and stars[i].brightness > 160 and stars[j].brightness > 160:
+                        alpha = int((1 - dist / 65) * 85)
+                        line_surf = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                        pygame.draw.line(
+                            line_surf,
+                            (180, 220, 255, alpha),
+                            (stars[i].x, stars[i].y),
+                            (stars[j].x, stars[j].y),
+                            1
+                        )
+                        screen.blit(line_surf, (0, 0))
+
+            shooting_star.spawn()
+            shooting_star.update()
+            shooting_star.draw(screen)
+
+        else:
+            screen.fill((215, 232, 248))
+            pygame.draw.circle(screen, (255, 215, 80), (140, 90), 45)
+
+        board_rect = pygame.Rect(30, 65, WIDTH - 60, HEIGHT - 140)
+        pygame.draw.rect(
+            screen,
+            (18, 22, 32, 210) if is_night else (255, 255, 255, 230),
+            board_rect,
+            border_radius=10
+        )
+        pygame.draw.rect(
+            screen,
+            (55, 65, 85) if is_night else (190, 200, 215),
+            board_rect,
+            2,
+            border_radius=10
+        )
+
+        toggle.draw(screen)
+
+        now = dt.now()
+        time_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        for idx, char in enumerate(time_str):
+            if idx < len(time_tiles):
+                time_tiles[idx].set_char(char)
+                time_tiles[idx].update()
+                time_tiles[idx].draw(screen)
+
+        pygame.display.flip()
+
+    pygame.quit()
+
+
+# ==========================================
+# 4. 프로그램 엔트리 포인트
+# ==========================================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # 환경변수 PYGAME_RUN이 "1"로 설정되어 있으면 Pygame 창을 실행하고,
+    # 기본 상태(웹 서버 모드)에서는 Flask 앱을 실행합니다.
+    if os.environ.get("PYGAME_RUN") == "1":
+        run_pygame()
+    else:
+        port = int(os.environ.get("PORT", 5000))
+        app.run(host="0.0.0.0", port=port, debug=False)
