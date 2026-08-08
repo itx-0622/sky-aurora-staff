@@ -139,7 +139,7 @@ def add_log(data, category, user_name, action, device_type="PC"):
 # --------------------------------------------------
 # 🎨 프론트엔드 UI/UX
 # --------------------------------------------------
-MAIN_HTML_TEMPLATE = """
+MAIN_HTML_TEMPLATE = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
