@@ -26,7 +26,6 @@ DEFAULT_ADMINS = ["1534184089144266872", "843621337066504225"]
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 
 # --------------------------------------------------
@@ -65,7 +64,6 @@ def load_data():
       "user_whitelist": [],
       "user_blacklist": [],
       "user_profiles": {},
-      "quiz_config": {"difficulty": "medium", "count": 3},
       "manuals": [
           {
               "id": 1,
@@ -104,7 +102,6 @@ def save_data(data):
           "utf-8"
       )
 
-      # KST 시간 기준 저장 로깅
       now_kst = (
           datetime.datetime.utcnow() + datetime.timedelta(hours=9)
       ).strftime("%Y-%m-%d %H:%M:%S")
@@ -155,34 +152,42 @@ MAIN_HTML_TEMPLATE = """
         
         :root {
             --bg-body: #030509;
-            --container-bg: rgba(8, 12, 24, 0.85);
-            --container-border: rgba(0, 255, 200, 0.25);
+            --container-bg: rgba(10, 15, 30, 0.55);
+            --container-border: rgba(0, 255, 200, 0.3);
+            --glass-glow: rgba(0, 255, 200, 0.15);
             --text-main: #ffffff;
             --text-sub: #cbd5e1;
-            --header-bg: rgba(5, 8, 18, 0.95);
-            --sidebar-bg: rgba(0, 0, 0, 0.4);
-            --card-bg: rgba(5, 8, 17, 0.7);
-            --input-bg: rgba(3, 5, 9, 0.8);
-            --btn-item-bg: rgba(10, 16, 32, 0.95);
+            --header-bg: rgba(8, 12, 24, 0.65);
+            --sidebar-bg: rgba(5, 8, 18, 0.45);
+            --card-bg: rgba(12, 18, 36, 0.55);
+            --input-bg: rgba(5, 8, 16, 0.65);
+            --btn-item-bg: rgba(15, 23, 42, 0.75);
             --intro-bg: #030509;
             --intro-border: #00ffaa;
             --intro-text: #ffffff;
+            --flip-bg: #0f172a;
+            --flip-text: #00ffaa;
+            --flip-border: rgba(0, 255, 170, 0.4);
         }
 
         body.day-theme {
             --bg-body: #e0f2fe;
-            --container-bg: rgba(255, 255, 255, 0.85);
-            --container-border: rgba(56, 189, 248, 0.4);
+            --container-bg: rgba(255, 255, 255, 0.55);
+            --container-border: rgba(56, 189, 248, 0.5);
+            --glass-glow: rgba(56, 189, 248, 0.2);
             --text-main: #0f172a;
             --text-sub: #334155;
-            --header-bg: rgba(241, 245, 249, 0.95);
-            --sidebar-bg: rgba(255, 255, 255, 0.5);
-            --card-bg: rgba(255, 255, 255, 0.75);
-            --input-bg: rgba(255, 255, 255, 0.9);
-            --btn-item-bg: rgba(241, 245, 249, 0.95);
+            --header-bg: rgba(241, 245, 249, 0.7);
+            --sidebar-bg: rgba(255, 255, 255, 0.4);
+            --card-bg: rgba(255, 255, 255, 0.65);
+            --input-bg: rgba(255, 255, 255, 0.85);
+            --btn-item-bg: rgba(241, 245, 249, 0.85);
             --intro-bg: #f0f9ff;
             --intro-border: #0284c7;
             --intro-text: #0f172a;
+            --flip-bg: #ffffff;
+            --flip-text: #0f172a;
+            --flip-border: rgba(2, 132, 199, 0.4);
         }
 
         body {
@@ -202,120 +207,165 @@ MAIN_HTML_TEMPLATE = """
 
         #custom-notification {
             position: fixed; top: 25px; right: 25px; z-index: 999999; display: flex; align-items: center; gap: 12px;
-            padding: 14px 22px; background: rgba(8, 15, 30, 0.95); border: 1px solid #00ffaa;
-            border-radius: 14px; box-shadow: 0 0 20px rgba(0, 255, 170, 0.4); color: #fff;
+            padding: 14px 22px; background: rgba(10, 18, 36, 0.75); backdrop-filter: blur(20px); border: 1px solid var(--container-border);
+            border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.2); color: #fff;
             transform: translateX(150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             font-family: 'Pretendard', sans-serif; font-size: 14px; font-weight: 600;
         }
         #custom-notification.show { transform: translateX(0); }
 
+        /* 🌌 인트로 화면 고급화 연출 */
         #intro-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: var(--intro-bg); z-index: 99999; display: flex; flex-direction: column;
             justify-content: center; align-items: center; opacity: 1; transition: opacity 0.8s ease, background 0.5s ease;
+            backdrop-filter: blur(20px);
         }
         
         .intro-circle-container {
-            position: relative; width: 120px; height: 120px; display: flex;
-            justify-content: center; align-items: center; margin-bottom: 24px;
+            position: relative; width: 140px; height: 140px; display: flex;
+            justify-content: center; align-items: center; margin-bottom: 28px;
         }
         .intro-aura-glow {
             position: absolute; width: 100%; height: 100%; border-radius: 50%;
-            background: radial-gradient(circle, rgba(0,255,170,0.6) 0%, rgba(0,242,254,0.2) 60%, transparent 100%);
-            animation: auraPulse 2s ease-in-out infinite alternate; filter: blur(10px);
+            background: radial-gradient(circle, rgba(0,255,170,0.8) 0%, rgba(0,242,254,0.3) 50%, transparent 80%);
+            animation: auraPulse 2s ease-in-out infinite alternate; filter: blur(14px);
         }
-        @keyframes auraPulse { 0% { transform: scale(0.85); opacity: 0.4; } 100% { transform: scale(1.35); opacity: 0.9; } }
+        @keyframes auraPulse { 0% { transform: scale(0.8); opacity: 0.3; } 100% { transform: scale(1.4); opacity: 0.95; } }
 
         .intro-avatar {
-            width: 100px; height: 100px; border-radius: 50%; object-fit: cover;
-            opacity: 0; transform: scale(0.6); transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-            border: 2px solid var(--intro-border); box-shadow: 0 0 25px rgba(0,255,170,0.6); z-index: 2;
+            width: 110px; height: 110px; border-radius: 50%; object-fit: cover;
+            opacity: 0; transform: scale(0.5) rotate(-15deg); transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border: 3px solid var(--intro-border); box-shadow: 0 0 35px rgba(0,255,170,0.7), inset 0 0 15px rgba(255,255,255,0.5); z-index: 2;
         }
-        .intro-avatar.show { opacity: 1; transform: scale(1); }
-        .intro-progress-text { font-size: 28px; color: var(--intro-border); font-family: 'GmarketSansBold'; letter-spacing: 1px; }
-        .intro-welcome-text { font-size: 18px; color: var(--intro-text); font-family: 'Pretendard'; font-weight: 600; margin-top: 16px; opacity: 0; transition: opacity 0.5s ease; text-align: center; padding: 0 20px; }
-        .intro-welcome-text.show { opacity: 1; }
+        .intro-avatar.show { opacity: 1; transform: scale(1) rotate(0deg); }
+        
+        .intro-progress-text { 
+            font-size: 36px; color: var(--intro-border); font-family: 'GmarketSansBold'; letter-spacing: 2px;
+            text-shadow: 0 0 20px var(--intro-border); margin-bottom: 10px;
+        }
+        .intro-welcome-text { 
+            font-size: 22px; color: var(--intro-text); font-family: 'GmarketSansBold'; font-weight: bold;
+            margin-top: 16px; opacity: 0; transform: translateY(20px); transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1); text-align: center; padding: 0 20px;
+            text-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+        .intro-welcome-text.show { opacity: 1; transform: translateY(0); }
 
         #bg-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
 
+        /* 🔮 유리질 UI (Glassmorphism) 스타일 */
+        .glass-panel {
+            background: var(--container-bg);
+            backdrop-filter: blur(25px) saturate(180%);
+            -webkit-backdrop-filter: blur(25px) saturate(180%);
+            border: 1px solid var(--container-border);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+
         .container {
-            position: relative; z-index: 2; width: 94%; max-width: 1280px; height: 90vh;
-            background: var(--container-bg); backdrop-filter: blur(25px); border: 1px solid var(--container-border);
-            border-radius: 24px; box-shadow: 0 0 60px rgba(0, 255, 170, 0.12);
-            display: flex; flex-direction: column; overflow: hidden; animation: containerAppear 0.8s ease;
+            position: relative; z-index: 2; width: 94%; max-width: 1320px; height: 90vh;
+            border-radius: 28px; display: flex; flex-direction: column; overflow: hidden; animation: containerAppear 0.8s ease;
             transition: background 0.5s ease, border-color 0.5s ease;
         }
-        @keyframes containerAppear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes containerAppear { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-        header { padding: 16px 24px; background: var(--header-bg); border-bottom: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; transition: background 0.5s ease; backdrop-filter: blur(10px); }
-        header h1 { font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        header { padding: 14px 24px; background: var(--header-bg); backdrop-filter: blur(20px); border-bottom: 1px solid var(--container-border); display: flex; justify-content: space-between; align-items: center; transition: background 0.5s ease; }
+        header h1 { font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-family: 'GmarketSansBold'; }
         
-        .header-controls { display: flex; align-items: center; gap: 12px; }
-        .theme-toggle-btn {
-            background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3);
-            color: var(--text-main); font-family: 'Pretendard'; font-size: 12px; font-weight: bold;
-            padding: 6px 14px; border-radius: 20px; cursor: pointer; transition: all 0.3s;
-            display: flex; align-items: center; gap: 6px; backdrop-filter: blur(5px);
+        .header-controls { display: flex; align-items: center; gap: 16px; }
+
+        /* ⏱️ 2026형 3D 플립 시계 스타일 */
+        .flip-clock {
+            display: flex; gap: 6px; align-items: center; perspective: 400px; font-family: 'GmarketSansBold', monospace;
         }
-        body.day-theme .theme-toggle-btn { background: rgba(0, 0, 0, 0.08); border-color: rgba(0, 0, 0, 0.2); }
-        .theme-toggle-btn:hover { transform: scale(1.05); }
+        .flip-unit-group { display: flex; gap: 3px; }
+        .flip-card {
+            position: relative; width: 28px; height: 38px; background: var(--flip-bg);
+            border: 1px solid var(--flip-border); border-radius: 6px; color: var(--flip-text);
+            font-size: 20px; font-weight: bold; display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+            transform-style: preserve-3d; transition: background 0.5s, color 0.5s, border-color 0.5s;
+        }
+        .flip-card::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 50%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.25), transparent);
+            border-top-left-radius: 5px; border-top-right-radius: 5px; pointer-events: none;
+        }
+        .flip-card.flipping {
+            animation: flipAnim 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @keyframes flipAnim {
+            0% { transform: rotateX(0deg); }
+            50% { transform: rotateX(-90deg); filter: brightness(1.2); }
+            100% { transform: rotateX(0deg); }
+        }
+        .flip-colon { font-size: 18px; color: var(--flip-text); font-weight: bold; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-        .badge-admin { background: rgba(255, 45, 85, 0.2); border: 1px solid #ff2d55; color: #ff2d55; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
-        .badge-staff { background: rgba(0, 255, 170, 0.2); border: 1px solid #00ffaa; color: #00ffaa; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; }
+        .theme-toggle-btn {
+            background: rgba(255, 255, 255, 0.12); border: 1px solid var(--container-border);
+            color: var(--text-main); font-family: 'Pretendard'; font-size: 12px; font-weight: bold;
+            padding: 7px 15px; border-radius: 20px; cursor: pointer; transition: all 0.3s;
+            display: flex; align-items: center; gap: 6px; backdrop-filter: blur(10px);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+        .theme-toggle-btn:hover { transform: translateY(-1px) scale(1.03); box-shadow: 0 0 15px var(--glass-glow); }
+
+        .badge-admin { background: rgba(255, 45, 85, 0.2); border: 1px solid #ff2d55; color: #ff2d55; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; font-weight: bold; }
+        .badge-staff { background: rgba(0, 255, 170, 0.2); border: 1px solid #00ffaa; color: #00ffaa; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-family: 'Pretendard'; font-weight: bold; }
         .avatar-img { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #00ffaa; object-fit: cover; }
-        .logout-btn { font-family: 'Pretendard', sans-serif; color: var(--text-sub); text-decoration: none; font-size: 12px; padding: 5px 12px; border: 1px solid rgba(125,125,125,0.3); border-radius: 8px; }
-        .logout-btn:hover { color: var(--text-main); border-color: #00ffaa; background: rgba(0, 255, 170, 0.1); }
+        .logout-btn { font-family: 'Pretendard', sans-serif; color: var(--text-sub); text-decoration: none; font-size: 12px; padding: 6px 12px; border: 1px solid var(--container-border); border-radius: 8px; backdrop-filter: blur(5px); }
+        .logout-btn:hover { color: var(--text-main); border-color: #00ffaa; background: rgba(0, 255, 170, 0.15); }
 
-        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid var(--container-border); border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.3); }
-        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 12px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.2s; }
-        .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(88, 101, 242, 0.5); }
+        .login-box { padding: 50px 24px; text-align: center; margin: auto; max-width: 400px; width: 90%; border-radius: 24px; }
+        .discord-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #5865F2; color: white; text-decoration: none; border-radius: 14px; font-family: 'Pretendard', sans-serif; font-weight: bold; font-size: 15px; border: none; cursor: pointer; transition: all 0.25s; box-shadow: 0 8px 20px rgba(88, 101, 242, 0.4); }
+        .discord-btn:hover { background: #4752C4; transform: translateY(-2px); box-shadow: 0 12px 25px rgba(88, 101, 242, 0.6); }
 
         .dashboard { display: flex; flex: 1; overflow: hidden; }
         
-        .sidebar { width: 300px; background: var(--sidebar-bg); backdrop-filter: blur(15px); border-right: 1px solid rgba(125, 125, 125, 0.2); padding: 20px 14px; overflow-y: auto; transition: background 0.5s ease; }
-        .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1px; margin: 16px 0 8px 8px; text-transform: uppercase; font-family: 'Pretendard'; font-weight: bold; }
+        .sidebar { width: 300px; background: var(--sidebar-bg); backdrop-filter: blur(20px); border-right: 1px solid var(--container-border); padding: 20px 14px; overflow-y: auto; transition: background 0.5s ease; }
+        .sidebar-category-title { font-size: 12px; color: #00ffaa; letter-spacing: 1px; margin: 16px 0 8px 8px; text-transform: uppercase; font-family: 'GmarketSansBold'; font-weight: bold; }
         body.day-theme .sidebar-category-title { color: #0284c7; }
         
-        .aurora-btn-wrapper { position: relative; margin-bottom: 8px; border-radius: 12px; overflow: hidden; padding: 2px; background: rgba(125, 125, 125, 0.05); transition: all 0.25s ease; }
-        .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); box-shadow: 0 0 15px rgba(0, 255, 170, 0.4); }
-        .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: var(--btn-item-bg); border: none; color: var(--text-sub); border-radius: 10px; cursor: pointer; font-size: 13px; font-family: 'Pretendard', sans-serif; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .aurora-btn-wrapper { position: relative; margin-bottom: 8px; border-radius: 12px; overflow: hidden; padding: 1px; background: rgba(255, 255, 255, 0.05); transition: all 0.25s ease; border: 1px solid rgba(255,255,255,0.08); }
+        .aurora-btn-wrapper.active { background: linear-gradient(90deg, #00ffaa, #00f2fe); border-color: transparent; box-shadow: 0 0 20px rgba(0, 255, 170, 0.4); }
+        .item-btn { position: relative; z-index: 1; width: 100%; text-align: left; padding: 12px 14px; background: var(--btn-item-bg); border: none; color: var(--text-sub); border-radius: 11px; cursor: pointer; font-size: 13px; font-family: 'Pretendard', sans-serif; font-weight: 600; display: flex; justify-content: space-between; align-items: center; backdrop-filter: blur(10px); }
         .aurora-btn-wrapper.active .item-btn { color: var(--text-main); font-weight: bold; }
         .pin-badge { font-size: 11px; margin-right: 4px; }
 
         .main-content { flex: 1; padding: 28px; overflow-y: auto; position: relative; scroll-behavior: smooth; }
-        .content-card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid rgba(125, 125, 125, 0.15); border-radius: 18px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: relative; margin-bottom: 20px; transition: background 0.5s ease; }
+        .content-card { border-radius: 20px; padding: 24px; position: relative; margin-bottom: 20px; transition: background 0.5s ease; }
         
-        .doc-title { font-size: 20px; margin-bottom: 16px; color: var(--text-main); border-bottom: 1px solid rgba(125, 125, 125, 0.2); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        .doc-title { font-size: 20px; margin-bottom: 16px; color: var(--text-main); border-bottom: 1px solid var(--container-border); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; font-family: 'GmarketSansBold'; }
         .doc-title-text { display: flex; align-items: center; gap: 10px; }
-        .doc-title-text::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
-        .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); background: rgba(0, 0, 0, 0.15); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
+        .doc-title-text::before { content: ''; display: inline-block; width: 5px; height: 22px; background: #00ffaa; border-radius: 3px; box-shadow: 0 0 10px #00ffaa; }
+        .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); background: rgba(0, 0, 0, 0.15); padding: 22px; border-radius: 16px; border: 1px solid var(--container-border); }
 
-        /* 동영상 미리보기 박스 스타일 */
-        .video-embed-box { margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px; border: 1px solid rgba(0, 255, 170, 0.3); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+        .video-embed-box { margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 14px; border: 1px solid var(--container-border); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
         .video-embed-box iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
 
-        input, textarea, select { width: 100%; background: var(--input-bg); color: var(--text-main); border: 1px solid rgba(125, 125, 125, 0.3); padding: 12px 14px; border-radius: 10px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; backdrop-filter: blur(5px); }
-        input:focus, textarea:focus, select:focus { border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.3); }
+        input, textarea, select { width: 100%; background: var(--input-bg); color: var(--text-main); border: 1px solid var(--container-border); padding: 12px 14px; border-radius: 12px; margin-bottom: 12px; outline: none; font-family: 'Pretendard', sans-serif; backdrop-filter: blur(10px); }
+        input:focus, textarea:focus, select:focus { border-color: #38bdf8; box-shadow: 0 0 15px rgba(56, 189, 248, 0.4); }
 
         .btn-ui {
             position: relative; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none;
-            padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif;
-            transition: all 0.25s ease; outline: none; overflow: hidden;
+            padding: 10px 18px; border-radius: 12px; font-weight: 700; cursor: pointer; font-family: 'Pretendard', sans-serif;
+            transition: all 0.25s ease; outline: none; overflow: hidden; box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
         }
         .btn-ui::after {
             content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
             background: radial-gradient(circle, rgba(0, 255, 170, 0.3) 0%, transparent 70%);
             opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
         }
-        .btn-ui:hover { transform: translateY(-2px); box-shadow: 0 0 15px rgba(0, 255, 170, 0.5), 0 0 30px rgba(0, 242, 254, 0.3); }
+        .btn-ui:hover { transform: translateY(-2px); box-shadow: 0 0 20px rgba(0, 255, 170, 0.5); }
         .btn-ui:hover::after { opacity: 1; }
-        .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
-        .btn-danger:hover { box-shadow: 0 0 15px rgba(255, 45, 85, 0.6); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
+        .btn-danger:hover { box-shadow: 0 0 20px rgba(255, 45, 85, 0.6); }
         .btn-secondary { background: linear-gradient(135deg, #475569, #334155); }
 
-        .editor-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 10px; backdrop-filter: blur(5px); }
-        .editor-toolbar button { padding: 6px 10px; font-size: 12px; background: var(--btn-item-bg); color: var(--text-main); border: 1px solid rgba(125,125,125,0.3); border-radius: 6px; cursor: pointer; font-family: 'Pretendard'; }
-        .editor-toolbar button:hover { border-color: #00ffaa; color: #00ffaa; }
+        .editor-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; background: rgba(0,0,0,0.25); padding: 10px; border-radius: 12px; backdrop-filter: blur(10px); border: 1px solid var(--container-border); }
+        .editor-toolbar button { padding: 6px 10px; font-size: 12px; background: var(--btn-item-bg); color: var(--text-main); border: 1px solid var(--container-border); border-radius: 8px; cursor: pointer; font-family: 'Pretendard'; transition: all 0.2s; }
+        .editor-toolbar button:hover { border-color: #00ffaa; color: #00ffaa; transform: translateY(-1px); }
 
         .speech-bubble-pop {
             position: absolute; background: #00ffaa; color: #030509; padding: 10px 16px; border-radius: 12px;
@@ -327,12 +377,12 @@ MAIN_HTML_TEMPLATE = """
         }
         @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-        .key-display { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.3); border-radius: 12px; margin-top: 10px; backdrop-filter: blur(5px); }
+        .key-display { display: flex; gap: 10px; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.3); border-radius: 14px; margin-top: 10px; backdrop-filter: blur(10px); border: 1px solid var(--container-border); }
         .key-cap { background: #334155; color: #fff; padding: 10px 16px; border-radius: 8px; border-bottom: 4px solid #1e293b; font-family: monospace; font-size: 18px; font-weight: bold; }
         .key-cap.active { background: #00ffaa; color: #000; border-bottom-color: #00cc88; transform: translateY(2px); }
 
         ul.data-list { list-style: none; padding: 0; }
-        ul.data-list li { background: var(--btn-item-bg); padding: 14px; margin-bottom: 10px; border-radius: 12px; border: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; }
+        ul.data-list li { background: var(--btn-item-bg); padding: 14px; margin-bottom: 10px; border-radius: 14px; border: 1px solid var(--container-border); display: flex; justify-content: space-between; align-items: center; font-family: 'Pretendard', sans-serif; font-size: 14px; backdrop-filter: blur(10px); }
 
         .user-card-info { display: flex; align-items: center; gap: 12px; }
         .user-card-avatar { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #00ffaa; object-fit: cover; }
@@ -345,8 +395,8 @@ MAIN_HTML_TEMPLATE = """
 
         .mention-dropdown {
             position: absolute; top: 45px; left: 0; right: 0; z-index: 1000;
-            background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid #00ffaa; border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); display: none; max-height: 180px; overflow-y: auto;
+            background: var(--card-bg); backdrop-filter: blur(25px); border: 1px solid #00ffaa; border-radius: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); display: none; max-height: 180px; overflow-y: auto;
         }
         .mention-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; transition: background 0.2s; }
         .mention-item:hover { background: rgba(0, 255, 170, 0.15); }
@@ -359,12 +409,13 @@ MAIN_HTML_TEMPLATE = """
         @media (max-width: 768px) {
             .container { width: 100%; height: 100vh; border-radius: 0; border: none; }
             .dashboard { flex-direction: column; }
-            .sidebar { width: 100%; height: 210px; border-right: none; border-bottom: 1px solid rgba(125,125,125,0.2); padding: 12px; }
+            .sidebar { width: 100%; height: 210px; border-right: none; border-bottom: 1px solid var(--container-border); padding: 12px; }
             .main-content { padding: 16px; }
             header { padding: 12px 16px; }
             header h1 { font-size: 15px; }
             .doc-title { font-size: 17px; }
             .doc-body { font-size: 14px; padding: 14px; }
+            .flip-card { width: 22px; height: 30px; font-size: 16px; }
         }
     </style>
     <script>
@@ -405,6 +456,16 @@ MAIN_HTML_TEMPLATE = """
                 keyCap.innerText = e.key.toUpperCase();
                 keyCap.classList.add('active');
                 setTimeout(() => keyCap.classList.remove('active'), 300);
+            }
+
+            // ⌨️ 매뉴얼 편집 창에서 Shift + Enter 입력 시 <br/> 추가 처리
+            if (e.target && e.target.id === 'm-edit-content' && e.shiftKey && e.key === 'Enter') {
+                e.preventDefault();
+                const textarea = e.target;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                textarea.value = textarea.value.substring(0, start) + "<br/>\n" + textarea.value.substring(end);
+                textarea.selectionStart = textarea.selectionEnd = start + 6;
             }
         }, true);
 
@@ -451,10 +512,28 @@ MAIN_HTML_TEMPLATE = """
 
     <canvas id="bg-canvas"></canvas>
 
-    <div class="container">
+    <div class="container glass-panel">
         <header>
             <h1>SKY AURORA STAFF SYSTEM</h1>
             <div class="header-controls">
+                <!-- ⏱️ 2026형 3D 플립 시계 -->
+                <div class="flip-clock" id="3d-flip-clock">
+                    <div class="flip-unit-group">
+                        <div class="flip-card" id="fh1">0</div>
+                        <div class="flip-card" id="fh2">0</div>
+                    </div>
+                    <div class="flip-colon">:</div>
+                    <div class="flip-unit-group">
+                        <div class="flip-card" id="fm1">0</div>
+                        <div class="flip-card" id="fm2">0</div>
+                    </div>
+                    <div class="flip-colon">:</div>
+                    <div class="flip-unit-group">
+                        <div class="flip-card" id="fs1">0</div>
+                        <div class="flip-card" id="fs2">0</div>
+                    </div>
+                </div>
+
                 <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleThemeMode()">
                     <span id="themeBtnIcon">☀️</span> <span id="themeBtnText">데이 모드</span>
                 </button>
@@ -467,8 +546,8 @@ MAIN_HTML_TEMPLATE = """
             </div>
         </header>
 
-        <div id="login-box" class="login-box">
-            <h2 style="font-size: 18px; margin-bottom: 24px; font-family: 'Pretendard';">🔒 스태프 시스템 인증</h2>
+        <div id="login-box" class="login-box glass-panel">
+            <h2 style="font-size: 18px; margin-bottom: 24px; font-family: 'GmarketSansBold';">🔒 스태프 시스템 인증</h2>
             <button onclick="login()" class="discord-btn">
                 디스코드 계정으로 통합 로그인
             </button>
@@ -478,11 +557,7 @@ MAIN_HTML_TEMPLATE = """
             <div class="sidebar">
                 <div id="manual-sidebar-categorized"></div>
 
-                <div class="aurora-btn-wrapper" style="margin-top:15px;">
-                    <button class="item-btn" onclick="transitionToTab('view-quiz')">🧩 AI 매뉴얼 퀴즈</button>
-                </div>
-
-                <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(125,125,125,0.2); padding-top:10px;">
+                <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid var(--container-border); padding-top:10px;">
                     <div class="sidebar-category-title" style="color:#38bdf8;">Admin Controls</div>
                     <div class="aurora-btn-wrapper admin-nav" id="nav-m-manage">
                         <button class="item-btn" onclick="switchAdminTab('m-manage')">📖 매뉴얼 등록/관리</button>
@@ -508,31 +583,9 @@ MAIN_HTML_TEMPLATE = """
                     <div id="doc-body" class="doc-body"></div>
                 </div>
 
-                <!-- AI 퀴즈 탭 -->
-                <div id="view-quiz" class="tab-enter" style="display:none;">
-                    <div class="doc-title"><div class="doc-title-text">AI 매뉴얼 이해도 테스트</div></div>
-                    <div class="content-card">
-                        <div id="quiz-admin-config" style="display:none; margin-bottom:20px; background:rgba(56,189,248,0.1); padding:14px; border-radius:12px; border:1px solid #38bdf8;">
-                            <h4 style="color:#38bdf8; margin-bottom:8px;">⚙️ [어드민] 퀴즈 설정</h4>
-                            <div style="display:flex; gap:10px;">
-                                <select id="quiz-difficulty" style="margin:0;">
-                                    <option value="easy">난이도: 쉬움</option>
-                                    <option value="medium" selected>난이도: 보통</option>
-                                    <option value="hard">난이도: 어려움</option>
-                                </select>
-                                <input type="number" id="quiz-count" value="3" min="1" max="10" placeholder="문제 수" style="margin:0; width:100px;">
-                                <button onclick="saveQuizConfig()" class="btn-ui" style="flex-shrink:0;">설정 저장</button>
-                            </div>
-                        </div>
-
-                        <button onclick="generateQuiz()" class="btn-ui" style="width:100%; margin-bottom:20px;">🤖 현재 매뉴얼 기반 AI 문제 생성하기</button>
-                        <div id="quiz-container"></div>
-                    </div>
-                </div>
-
                 <div id="view-admin-m-manage" class="tab-enter" style="display:none;">
                     <div class="doc-title"><div class="doc-title-text">매뉴얼 신규 등록 및 작성</div></div>
-                    <div class="content-card" id="manual-edit-card">
+                    <div class="content-card glass-panel" id="manual-edit-card">
                         <div style="margin-bottom:12px;">
                             <label style="font-size:12px; color:#00ffaa; font-family:'Pretendard'; font-weight:bold; display:block; margin-bottom:4px;">수정할 매뉴얼 선택</label>
                             <select id="m-select-edit" onchange="onManualSelectToEdit(this.value)">
@@ -540,7 +593,6 @@ MAIN_HTML_TEMPLATE = """
                             </select>
                         </div>
 
-                        <!-- 서식 확장 도구 모음 -->
                         <div class="editor-toolbar">
                             <button onclick="insertTag('<img>', '이미지 URL', 'https://via.placeholder.com/400x200')">📷 이미지 추가</button>
                             <button onclick="insertYoutubeEmbed()">▶️ 유튜브 링크 삽입</button>
@@ -559,7 +611,7 @@ MAIN_HTML_TEMPLATE = """
                             </label>
                         </div>
                         <input type="text" id="m-edit-title" placeholder="매뉴얼 제목을 입력하세요">
-                        <textarea id="m-edit-content" style="height:220px;" placeholder="매뉴얼 상세 내용을 입력하세요 (HTML 서식 및 유튜브 URL 지원)"></textarea>
+                        <textarea id="m-edit-content" style="height:220px;" placeholder="매뉴얼 상세 내용을 입력하세요 (엔터 입력 시 줄바꿈 자동 적용 / Shift+Enter 단축키 지원)"></textarea>
                         
                         <div style="display:flex; gap:10px;">
                             <button onclick="saveManualData()" class="btn-ui" style="flex:1;">💾 매뉴얼 저장/수정</button>
@@ -573,7 +625,7 @@ MAIN_HTML_TEMPLATE = """
                 <div id="view-admin-permissions" class="tab-enter" style="display:none;">
                     <div class="doc-title"><div class="doc-title-text">스태프 접근 권한 관리</div></div>
                     
-                    <div class="content-card" style="margin-bottom:20px;">
+                    <div class="content-card glass-panel" style="margin-bottom:20px;">
                         <div style="position:relative;">
                             <div style="display:flex; gap:10px; margin-bottom:8px;">
                                 <input type="text" id="perm-target-id" placeholder="대상 디스코드 ID 또는 @사용자이름 입력" style="margin-bottom:0;" oninput="onUserIdInput(this.value)">
@@ -581,7 +633,7 @@ MAIN_HTML_TEMPLATE = """
                             </div>
                             <div id="mention-dropdown" class="mention-dropdown"></div>
 
-                            <div id="searched-user-card" style="display:none; background:rgba(0, 255, 170, 0.05); border:1px solid #00ffaa; padding:12px; border-radius:12px; margin-bottom:12px;">
+                            <div id="searched-user-card" style="display:none; background:rgba(0, 255, 170, 0.08); border:1px solid #00ffaa; padding:12px; border-radius:12px; margin-bottom:12px;">
                                 <div class="user-card-info">
                                     <img id="sc-avatar" src="" class="user-card-avatar" alt="Avatar">
                                     <div class="user-card-names">
@@ -607,8 +659,8 @@ MAIN_HTML_TEMPLATE = """
                         </div>
                     </div>
 
-                    <div class="content-card" style="margin-bottom:20px;">
-                        <h3 style="font-size:14px; color:#00ffaa; margin-bottom:10px;">⚡ 선택 유저 일괄 제어</h3>
+                    <div class="content-card glass-panel" style="margin-bottom:20px;">
+                        <h3 style="font-size:14px; color:#00ffaa; margin-bottom:10px; font-family:'GmarketSansBold';">⚡ 선택 유저 일괄 제어</h3>
                         <div style="display:flex; gap:10px; flex-wrap:wrap;">
                             <button onclick="batchAction('admin_upgrade')" class="btn-ui">👑 선택 어드민 승격</button>
                             <button onclick="batchAction('admin_demote')" class="btn-ui btn-secondary">👑 어드민 권한 취소</button>
@@ -618,18 +670,18 @@ MAIN_HTML_TEMPLATE = """
                     </div>
 
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-                        <div class="content-card">
+                        <div class="content-card glass-panel">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                                <h3 style="color:#4ade80; font-size:15px;">화이트리스트 목록</h3>
+                                <h3 style="color:#4ade80; font-size:15px; font-family:'GmarketSansBold';">화이트리스트 목록</h3>
                                 <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); cursor:pointer;">
                                     <input type="checkbox" onclick="toggleSelectAll('wl-check', this.checked)" style="width:auto;"> 전체 선택
                                 </label>
                             </div>
                             <ul id="perm-wl-list" class="data-list"></ul>
                         </div>
-                        <div class="content-card">
+                        <div class="content-card glass-panel">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                                <h3 style="color:#f87171; font-size:15px;">블랙리스트 목록</h3>
+                                <h3 style="color:#f87171; font-size:15px; font-family:'GmarketSansBold';">블랙리스트 목록</h3>
                                 <label style="font-size:12px; font-family:'Pretendard'; color:var(--text-sub); cursor:pointer;">
                                     <input type="checkbox" onclick="toggleSelectAll('bl-check', this.checked)" style="width:auto;"> 전체 선택
                                 </label>
@@ -641,8 +693,8 @@ MAIN_HTML_TEMPLATE = """
 
                 <div id="view-admin-logs" class="tab-enter" style="display:none;">
                     <div class="doc-title"><div class="doc-title-text">실시간 활동 로그</div></div>
-                    <div class="content-card">
-                        <div id="admin-log-box" style="background:var(--input-bg); padding:16px; border-radius:12px; font-family:monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid rgba(125,125,125,0.2);"></div>
+                    <div class="content-card glass-panel">
+                        <div id="admin-log-box" style="background:var(--input-bg); padding:16px; border-radius:14px; font-family:monospace; font-size:12px; height:450px; overflow-y:auto; border:1px solid var(--container-border);"></div>
                     </div>
                 </div>
             </div>
@@ -650,6 +702,32 @@ MAIN_HTML_TEMPLATE = """
     </div>
 
     <script>
+        // ⏱️ 2026형 3D 플립 시계 엔진
+        let lastTimeStr = "";
+        function updateFlipClock() {
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            const currStr = h + m + s;
+
+            if (currStr !== lastTimeStr) {
+                const ids = ['fh1', 'fh2', 'fm1', 'fm2', 'fs1', 'fs2'];
+                for (let i = 0; i < 6; i++) {
+                    const card = document.getElementById(ids[i]);
+                    if (card && (!lastTimeStr || lastTimeStr[i] !== currStr[i])) {
+                        card.innerText = currStr[i];
+                        card.classList.remove('flipping');
+                        void card.offsetWidth; // Reflow 트리거
+                        card.classList.add('flipping');
+                    }
+                }
+                lastTimeStr = currStr;
+            }
+        }
+        setInterval(updateFlipClock, 1000);
+        updateFlipClock();
+
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
 
@@ -668,7 +746,6 @@ MAIN_HTML_TEMPLATE = """
 
         let progress = currentMode === 'day' ? 1.0 : 0.0;
         let targetProgress = progress;
-        let isSetting = currentMode === 'night';
 
         applyThemeUI(currentMode);
 
@@ -676,11 +753,9 @@ MAIN_HTML_TEMPLATE = """
             if (targetProgress === 0) {
                 targetProgress = 1.0;
                 currentMode = 'day';
-                isSetting = false;
             } else {
                 targetProgress = 0.0;
                 currentMode = 'night';
-                isSetting = true;
             }
             localStorage.setItem('sky_theme_mode', currentMode);
             applyThemeUI(currentMode);
@@ -720,13 +795,6 @@ MAIN_HTML_TEMPLATE = """
             size: Math.random() * 2,
             alpha: Math.random(),
             speed: Math.random() * 0.012 + 0.005
-        }));
-
-        const celestialBodies = Array.from({ length: 35 }, () => ({
-            x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
-            size: Math.random() * 1.5 + 0.5,
-            alpha: Math.random()
         }));
 
         let tick = 0;
@@ -782,6 +850,7 @@ MAIN_HTML_TEMPLATE = """
             ctx.fillStyle = grad; ctx.filter = 'blur(25px)'; ctx.fill(); ctx.restore();
         }
 
+        // ☀️/🌙 태양 및 달 물리 궤도 애니메이션 보정
         function animate() {
             progress += (targetProgress - progress) * 0.02;
 
@@ -827,15 +896,15 @@ MAIN_HTML_TEMPLATE = """
             drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.35)', 'rgba(0, 150, 255, 0.03)', 0.8, auroraOpacity);
             drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraOpacity);
 
-            // 🌙 달(Moon) 렌더링 추가 (밤 모드에서 상단 우측 영역에 위치, 낮에는 서서히 사라짐)
+            // 🌙 달(Moon) 물리 궤도 (밤일 때 높게 뜨고 낮일 때 지평선 아래로 수직 하강)
             const moonOpacity = Math.max(0, 1 - progress * 1.5);
             if (moonOpacity > 0) {
                 const moonX = canvas.width * 0.78;
-                const moonY = canvas.height * 0.22;
+                const moonY = (canvas.height * 0.22) + (progress * canvas.height * 0.8);
                 const moonRadius = 32;
 
                 const moonGlow = ctx.createRadialGradient(moonX, moonY, 5, moonX, moonY, moonRadius * 2.5);
-                moonGlow.addColorStop(0, `rgba(220, 235, 255, ${0.3 * moonOpacity})`);
+                moonGlow.addColorStop(0, `rgba(220, 235, 255, ${0.35 * moonOpacity})`);
                 moonGlow.addColorStop(1, 'rgba(255, 255, 255, 0)');
                 ctx.fillStyle = moonGlow;
                 ctx.beginPath();
@@ -850,19 +919,20 @@ MAIN_HTML_TEMPLATE = """
                 ctx.fill();
                 ctx.shadowBlur = 0;
 
-                // 초승달/입체감을 위한 음영 크레이터 효과
                 ctx.beginPath();
                 ctx.arc(moonX - 8, moonY - 6, moonRadius * 0.85, 0, Math.PI * 2);
                 ctx.fillStyle = `rgba(205, 218, 240, ${0.5 * moonOpacity})`;
                 ctx.fill();
             }
 
-            // ☀️ 태양(Sun) 궤도 보정 및 위치 변경 (호 형태의 아치형 궤도로 상공에 안정적으로 머무르도록 개선)
-            if (progress > 0.01) {
-                const sunArcAngle = progress * Math.PI;
-                const sunX = canvas.width * 0.15 + progress * (canvas.width * 0.7);
-                const sunY = (canvas.height * 0.85) - Math.sin(sunArcAngle) * (canvas.height * 0.55) + (progress * canvas.height * 0.1);
+            // ☀️ 태양(Sun) 호(Arc) 물리 궤도 보정 (낮에는 하늘 높이 호를 그리며, 밤에는 y-offset 확대로 지평선 완벽 은닉)
+            const sunArcAngle = progress * Math.PI;
+            const sunX = canvas.width * 0.15 + progress * (canvas.width * 0.7);
+            const baseSunY = (canvas.height * 0.85) - Math.sin(sunArcAngle) * (canvas.height * 0.55);
+            const nightOffset = (1 - Math.sin(sunArcAngle)) * canvas.height * 0.6; 
+            const sunY = baseSunY + nightOffset;
 
+            if (sunY < canvas.height + 100) {
                 const r = 255;
                 const g = 245 - sunsetOpacity * 100;
                 const b = 180 - sunsetOpacity * 180;
@@ -892,12 +962,11 @@ MAIN_HTML_TEMPLATE = """
         }
         animate();
 
-        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [], quiz_config: {difficulty:'medium', count:3} };
+        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [] };
         let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
 
-        // 미리보기 토글 상태 관리
         let embedPreviewEnabled = localStorage.getItem('sky_embed_preview') !== 'false';
 
         function toggleEmbedPreview(enabled) {
@@ -906,7 +975,6 @@ MAIN_HTML_TEMPLATE = """
             renderCategorizedSidebar();
         }
 
-        // 유튜브 링크 처리 및 임베드 변환 헬퍼 함수
         function processYoutubeEmbeds(content, enablePreview) {
             if (!content) return '';
             
@@ -953,6 +1021,7 @@ MAIN_HTML_TEMPLATE = """
             } catch(e) { console.error("Sync error:", e); }
         }
 
+        // 🌌 인트로 연출 모듈 (사용자 별명(사용자 이름) 님 환영합니다 유지 및 기깔난 애니메이션)
         function runCustomIntro(nickname, username, avatarUrl, onComplete) {
             const introOverlay = document.getElementById('intro-overlay');
             const introProgress = document.getElementById('intro-progress');
@@ -962,7 +1031,7 @@ MAIN_HTML_TEMPLATE = """
             introAvatar.src = avatarUrl;
             introOverlay.style.display = 'flex';
 
-            const totalDuration = 2000;
+            const totalDuration = 1800;
             const startTime = performance.now();
 
             function updateLoading(currentTime) {
@@ -985,7 +1054,7 @@ MAIN_HTML_TEMPLATE = """
                             introOverlay.style.display = 'none';
                             onComplete();
                         }, 800);
-                    }, 1200);
+                    }, 1400);
                 }
             }
             requestAnimationFrame(updateLoading);
@@ -1006,17 +1075,10 @@ MAIN_HTML_TEMPLATE = """
                 roleBadge.innerText = 'ADMIN';
                 roleBadge.className = 'badge-admin';
                 document.getElementById('admin-menu-section').style.display = 'block';
-                document.getElementById('quiz-admin-config').style.display = 'block';
-                
-                if (data.quiz_config) {
-                    document.getElementById('quiz-difficulty').value = data.quiz_config.difficulty || 'medium';
-                    document.getElementById('quiz-count').value = data.quiz_config.count || 3;
-                }
             } else {
                 roleBadge.innerText = 'STAFF';
                 roleBadge.className = 'badge-staff';
                 document.getElementById('admin-menu-section').style.display = 'none';
-                document.getElementById('quiz-admin-config').style.display = 'none';
             }
 
             renderCategorizedSidebar();
@@ -1069,7 +1131,6 @@ MAIN_HTML_TEMPLATE = """
                 const current = appState.manuals[selectedManualIndex] || appState.manuals[0];
                 document.getElementById('doc-title').innerText = `${current.pinned ? '📌 ' : ''}${current.title}`;
                 
-                // 유튜브 및 미디어 링크 미리보기 변환 로직 적용
                 const processedContent = processYoutubeEmbeds(current.content, embedPreviewEnabled);
                 document.getElementById('doc-body').innerHTML = processedContent;
             }
@@ -1087,7 +1148,8 @@ MAIN_HTML_TEMPLATE = """
                     document.getElementById('m-edit-category').value = current.category || '';
                     document.getElementById('m-edit-pinned').checked = !!current.pinned;
                     document.getElementById('m-edit-title').value = current.title || '';
-                    document.getElementById('m-edit-content').value = current.content || '';
+                    // 불러올 때 <br/>을 \n으로 복원하여 편하게 편집
+                    document.getElementById('m-edit-content').value = (current.content || '').replace(/<br\s*[\/]?>/gi, '\n');
                 }
             }
         }
@@ -1166,7 +1228,7 @@ MAIN_HTML_TEMPLATE = """
                     document.getElementById('m-edit-category').value = current.category || '';
                     document.getElementById('m-edit-pinned').checked = !!current.pinned;
                     document.getElementById('m-edit-title').value = current.title || '';
-                    document.getElementById('m-edit-content').value = current.content || '';
+                    document.getElementById('m-edit-content').value = (current.content || '').replace(/<br\s*[\/]?>/gi, '\n');
                 }
             }
             const editCard = document.getElementById('manual-edit-card');
@@ -1203,75 +1265,6 @@ MAIN_HTML_TEMPLATE = """
             if (navEl) navEl.classList.add('active');
             
             transitionToTab(`view-admin-${tabName}`);
-        }
-
-        async function generateQuiz() {
-            const container = document.getElementById('quiz-container');
-            container.innerHTML = '<div style="text-align:center; padding:20px; color:#00ffaa;">🤖 AI가 매뉴얼을 분석하여 퀴즈를 생성하고 있습니다...</div>';
-
-            const res = await fetch('/api/quiz/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ manual_index: selectedManualIndex })
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                renderQuiz(data.questions);
-            } else {
-                container.innerHTML = '<div style="color:#ff2d55; padding:10px;">퀴즈 생성에 실패했습니다. (OpenAI API 키 설정 확인 필요)</div>';
-            }
-        }
-
-        function renderQuiz(questions) {
-            const container = document.getElementById('quiz-container');
-            if (!questions || questions.length === 0) {
-                container.innerHTML = '<div>생성된 문제가 없습니다.</div>';
-                return;
-            }
-
-            container.innerHTML = questions.map((q, qIdx) => `
-                <div style="background:rgba(0,0,0,0.2); padding:16px; border-radius:12px; margin-bottom:16px; border:1px solid rgba(125,125,125,0.2);">
-                    <div style="font-weight:bold; margin-bottom:10px; color:var(--text-main);">Q${qIdx+1}. ${q.question}</div>
-                    <div>
-                        ${q.options.map((opt, oIdx) => `
-                            <label style="display:block; padding:8px 12px; background:var(--btn-item-bg); margin-bottom:6px; border-radius:8px; cursor:pointer;">
-                                <input type="radio" name="q_${qIdx}" value="${oIdx}" style="width:auto; margin-right:8px;"> ${opt}
-                            </label>
-                        `).join('')}
-                    </div>
-                    <button class="btn-ui btn-secondary" style="margin-top:8px; padding:4px 10px; font-size:12px;" onclick="checkAnswer(${qIdx}, ${q.answer_index}, '${q.explanation}')">정답 확인</button>
-                    <div id="quiz-result-${qIdx}" style="margin-top:8px; font-size:13px;"></div>
-                </div>
-            `).join('');
-        }
-
-        function checkAnswer(qIdx, correctIdx, explanation) {
-            const selected = document.querySelector(`input[name="q_${qIdx}"]:checked`);
-            const resDiv = document.getElementById(`quiz-result-${qIdx}`);
-            if (!selected) return showNotification("답을 선택해주세요!");
-
-            if (parseInt(selected.value) === correctIdx) {
-                resDiv.innerHTML = `<span style="color:#4ade80; font-weight:bold;">⭕ 정답입니다!</span><br/><span style="color:var(--text-sub);">${explanation}</span>`;
-            } else {
-                resDiv.innerHTML = `<span style="color:#f87171; font-weight:bold;">❌ 오답입니다.</span><br/><span style="color:var(--text-sub);">${explanation}</span>`;
-            }
-        }
-
-        async function saveQuizConfig() {
-            const difficulty = document.getElementById('quiz-difficulty').value;
-            const count = parseInt(document.getElementById('quiz-count').value);
-
-            const res = await fetch('/api/admin/quiz_config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ difficulty, count })
-            });
-
-            if (res.ok) {
-                showNotification("퀴즈 설정이 저장되었습니다.");
-                syncSystemState();
-            }
         }
 
         function maskId(idStr) {
@@ -1342,7 +1335,7 @@ MAIN_HTML_TEMPLATE = """
             `}).join('');
 
             const logBox = document.getElementById('admin-log-box');
-            logBox.innerHTML = appState.logs.map(log => `<div style="margin-bottom:6px; border-bottom:1px dashed rgba(125,125,125,0.2); padding-bottom:4px;">${log}</div>`).join('');
+            logBox.innerHTML = appState.logs.map(log => `<div style="margin-bottom:6px; border-bottom:1px dashed var(--container-border); padding-bottom:4px;">${log}</div>`).join('');
         }
 
         async function searchAndDisplayUser() {
@@ -1431,14 +1424,17 @@ MAIN_HTML_TEMPLATE = """
             const category = document.getElementById('m-edit-category').value.trim();
             const pinned = document.getElementById('m-edit-pinned').checked;
             const title = document.getElementById('m-edit-title').value.trim();
-            const content = document.getElementById('m-edit-content').value.trim();
+            const rawContent = document.getElementById('m-edit-content').value.trim();
 
-            if (!title || !content) return showNotification("제목과 내용을 입력해주세요.");
+            if (!title || !rawContent) return showNotification("제목과 내용을 입력해주세요.");
+
+            // ↵ 엔터 줄바꿈을 <br/> 태그로 자동 치환하여 저장
+            const formattedContent = rawContent.replace(/\r\n|\r|\n/g, '<br/>');
 
             const res = await fetch('/api/admin/manual', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index: selectedManualIndex, category, pinned, title, content })
+                body: JSON.stringify({ index: selectedManualIndex, category, pinned, title, content: formattedContent })
             });
 
             if (res.ok) {
@@ -1610,9 +1606,6 @@ def get_state():
       "user": user,
       "role": role,
       "manuals": data.get("manuals", []),
-      "quiz_config": data.get(
-          "quiz_config", {"difficulty": "medium", "count": 3}
-      ),
       "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
       "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
       "admin_whitelist": data.get("admin_whitelist", [])
@@ -1833,117 +1826,6 @@ def admin_permission_batch():
   )
   save_data(data)
   return jsonify({"status": "success"})
-
-
-@app.route("/api/admin/quiz_config", methods=["POST"])
-def admin_quiz_config():
-  user = session.get("user")
-  if not user:
-    return jsonify({"error": "unauthorized"}), 401
-
-  data = load_data()
-  if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
-    return jsonify({"error": "forbidden"}), 403
-
-  req_data = request.json or {}
-  difficulty = req_data.get("difficulty", "medium")
-  count = req_data.get("count", 3)
-
-  data["quiz_config"] = {"difficulty": difficulty, "count": count}
-
-  user_name = user.get("global_name") or user.get("username")
-  add_log(
-      data,
-      "퀴즈 설정",
-      user_name,
-      f"퀴즈 설정 변경 (난이도: {difficulty}, 문제수: {count})",
-  )
-  save_data(data)
-  return jsonify({"status": "success"})
-
-
-@app.route("/api/quiz/generate", methods=["POST"])
-def generate_quiz():
-  user = session.get("user")
-  if not user:
-    return jsonify({"error": "unauthorized"}), 401
-
-  data = load_data()
-  req_data = request.json or {}
-  manual_idx = req_data.get("manual_index", 0)
-
-  manuals = data.get("manuals", [])
-  if manual_idx >= len(manuals):
-    manual_idx = 0
-
-  target_manual = (
-      manuals[manual_idx] if manuals else {"title": "기본", "content": "내용 없음"}
-  )
-  quiz_config = data.get("quiz_config", {"difficulty": "medium", "count": 3})
-
-  if not OPENAI_API_KEY:
-    return jsonify({
-        "questions": [{
-            "question": (
-                f"[{target_manual.get('title')}] 본 매뉴얼의 핵심 지침으로"
-                " 올바른 것은 무엇입니까?"
-            ),
-            "options": [
-                "외부 유출 허용",
-                "무단 캡처 금지 및 보안 유지",
-                "계정 공유 권장",
-                "로그 기록 비활성화",
-            ],
-            "answer_index": 1,
-            "explanation": (
-                "매뉴얼 지침에 따라 시스템 정보 유출 및 무단 캡처는 엄격히"
-                " 금지됩니다."
-            ),
-        }]
-    })
-
-  try:
-    prompt = f"""
-다음 매뉴얼 내용을 바탕으로 {quiz_config['count']}개의 객관식 퀴즈 문제를 생성하세요.
-난이도: {quiz_config['difficulty']}
-
-[매뉴얼 제목]: {target_manual.get('title')}
-[매뉴얼 내용]: {target_manual.get('content')}
-
-반드시 JSON 형식을 지켜서 응답하세요:
-{{
-  "questions": [
-    {{
-      "question": "질문 내용",
-      "options": ["보기1", "보기2", "보기3", "보기4"],
-      "answer_index": 0,
-      "explanation": "해설 내용"
-    }}
-  ]
-}}
-"""
-    res = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": "gpt-4o-mini",
-            "messages": [{"role": "user", "content": prompt}],
-            "response_format": {"type": "json_object"},
-        },
-        timeout=15,
-    )
-    if res.status_code == 200:
-      result_json = json.loads(
-          res.json()["choices"][0]["message"]["content"]
-      )
-      return jsonify(result_json)
-    else:
-      return jsonify({"error": "AI API 호출 실패"}), 500
-  except Exception as e:
-    return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
