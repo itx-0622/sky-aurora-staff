@@ -1,23 +1,18 @@
+import os
+import json
 import base64
 import datetime
-import json
-import math
-import os
-import random
-import sys
-from datetime import datetime as dt
-from flask import Flask, jsonify, redirect, render_template_string, request, session
-import pygame
+from flask import Flask, request, render_template_string, redirect, session, jsonify
 import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-# ==========================================
-# 1. Flask 웹 애플리케이션 및 설정
-# ==========================================
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = os.urandom(24)
 
+# ==========================================
+# ⚙️ 설정 및 환경 변수
+# ==========================================
 CLIENT_ID = "1534184089144266872"
 CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "ZfLY_vs2lo_LQVtd89ZB64jHe3dviRNm")
 BASE_URL = "https://sky-aurora-staff.onrender.com"
@@ -28,10 +23,9 @@ DEFAULT_ADMINS = ["1534184089144266872", "843621337066504225"]
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # --------------------------------------------------
-# 데이터 불러오기 및 저장 로직
+# 📁 데이터 불러오기 및 영구 저장 로직
 # --------------------------------------------------
 def load_data():
     if GITHUB_TOKEN and GITHUB_REPO:
@@ -66,10 +60,6 @@ def load_data():
         "user_whitelist": [],
         "user_blacklist": [],
         "user_profiles": {},
-        "quiz_config": {
-            "difficulty": "medium",
-            "count": 3
-        },
         "manuals": [
             {
                 "id": 1,
@@ -116,7 +106,7 @@ def add_log(data, category, user_name, action, device_type="PC"):
     data["logs"].insert(0, log_entry)
 
 # --------------------------------------------------
-# HTML 템플릿
+# 🎨 프론트엔드 UI/UX
 # --------------------------------------------------
 MAIN_HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -232,9 +222,31 @@ MAIN_HTML_TEMPLATE = """
         }
         @keyframes containerAppear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-        header { padding: 16px 24px; background: var(--header-bg); border-bottom: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; transition: background 0.5s ease; }
+        header { padding: 14px 24px; background: var(--header-bg); border-bottom: 1px solid rgba(125, 125, 125, 0.2); display: flex; justify-content: space-between; align-items: center; transition: background 0.5s ease; flex-wrap: wrap; gap: 10px; }
         header h1 { font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #00f2fe, #00ffaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         
+        /* 🛫 플립 디스플레이 시계 스타일 */
+        .flip-clock-container {
+            display: flex; align-items: center; gap: 4px; background: #080b12; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(0, 255, 170, 0.3); box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+        .flip-group { display: flex; align-items: center; gap: 2px; }
+        .flip-unit-label { font-size: 11px; color: #00ffaa; font-family: 'Pretendard'; font-weight: bold; margin: 0 2px; }
+        .flip-card {
+            position: relative; width: 22px; height: 30px; background: #111622; color: #fff; font-family: monospace; font-size: 18px; font-weight: bold; border-radius: 4px;
+            display: flex; justify-content: center; align-items: center; perspective: 300px; box-shadow: 0 2px 4px rgba(0,0,0,0.5); border: 1px solid #222b3e;
+        }
+        .flip-card::after {
+            content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(0,0,0,0.7); z-index: 5;
+        }
+        .flip-card.animate .flip-inner {
+            animation: flipAnim 0.5s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+        @keyframes flipAnim {
+            0% { transform: rotateX(0deg); }
+            50% { transform: rotateX(-90deg); background: #1a2234; }
+            100% { transform: rotateX(0deg); }
+        }
+
         .header-controls { display: flex; align-items: center; gap: 12px; }
         .theme-toggle-btn {
             background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3);
@@ -275,6 +287,7 @@ MAIN_HTML_TEMPLATE = """
         .doc-title-text::before { content: ''; display: inline-block; width: 4px; height: 20px; background: #00ffaa; border-radius: 2px; }
         .doc-body { font-family: 'Pretendard', sans-serif; font-weight: 500; font-size: 15px; line-height: 1.85; color: var(--text-sub); background: rgba(0, 0, 0, 0.15); padding: 20px; border-radius: 14px; border: 1px solid rgba(125, 125, 125, 0.1); }
 
+        /* 동영상 미리보기 박스 스타일 */
         .video-embed-box { margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px; border: 1px solid rgba(0, 255, 170, 0.3); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
         .video-embed-box iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
 
@@ -438,6 +451,42 @@ MAIN_HTML_TEMPLATE = """
     <div class="container">
         <header>
             <h1>SKY AURORA STAFF SYSTEM</h1>
+            
+            <!-- 🛫 공항 스타일 플립 디스플레이 시계 -->
+            <div class="flip-clock-container" id="flipClock">
+                <div class="flip-group">
+                    <div class="flip-card" id="fc-y1"><span class="flip-inner">0</span></div>
+                    <div class="flip-card" id="fc-y2"><span class="flip-inner">0</span></div>
+                    <div class="flip-card" id="fc-y3"><span class="flip-inner">0</span></div>
+                    <div class="flip-card" id="fc-y4"><span class="flip-inner">0</span></div>
+                    <span class="flip-unit-label">년</span>
+                </div>
+                <div class="flip-group">
+                    <div class="flip-card" id="fc-mo1"><span class="flip-inner">0</span></div>
+                    <div class="flip-card" id="fc-mo2"><span class="flip-inner">0</span></div>
+                    <span class="flip-unit-label">월</span>
+                </div>
+                <div class="flip-group">
+                    <div class="flip-card" id="fc-d1"><span class="flip-inner">0</span></div>
+                    <div class="flip-card" id="fc-d2"><span class="flip-inner">0</span></div>
+                    <span class="flip-unit-label">일</span>
+                </div>
+                <div class="flip-group" style="margin-left: 4px;">
+                    <div class="flip-card" id="fc-h1"><span class="flip-inner">0</span></div>
+                    <div class="flip-card" id="fc-h2"><span class="flip-inner">0</span></div>
+                    <span class="flip-unit-label">:</span>
+                </div>
+                <div class="flip-group">
+                    <div class="flip-card" id="fc-mi1"><span class="flip-inner">0</span></div>
+                    <div class="flip-card" id="fc-mi2"><span class="flip-inner">0</span></div>
+                    <span class="flip-unit-label">:</span>
+                </div>
+                <div class="flip-group">
+                    <div class="flip-card" id="fc-s1"><span class="flip-inner">0</span></div>
+                    <div class="flip-card" id="fc-s2"><span class="flip-inner">0</span></div>
+                </div>
+            </div>
+
             <div class="header-controls">
                 <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleThemeMode()">
                     <span id="themeBtnIcon">☀️</span> <span id="themeBtnText">데이 모드</span>
@@ -461,10 +510,6 @@ MAIN_HTML_TEMPLATE = """
         <div id="main-dashboard" class="dashboard" style="display:none;">
             <div class="sidebar">
                 <div id="manual-sidebar-categorized"></div>
-
-                <div class="aurora-btn-wrapper" style="margin-top:15px;">
-                    <button class="item-btn" onclick="transitionToTab('view-quiz')">🧩 AI 매뉴얼 퀴즈</button>
-                </div>
 
                 <div id="admin-menu-section" style="display:none; margin-top:20px; border-top:1px solid rgba(125,125,125,0.2); padding-top:10px;">
                     <div class="sidebar-category-title" style="color:#38bdf8;">Admin Controls</div>
@@ -490,28 +535,6 @@ MAIN_HTML_TEMPLATE = """
                         </label>
                     </div>
                     <div id="doc-body" class="doc-body"></div>
-                </div>
-
-                <!-- AI 퀴즈 탭 -->
-                <div id="view-quiz" class="tab-enter" style="display:none;">
-                    <div class="doc-title"><div class="doc-title-text">AI 매뉴얼 이해도 테스트</div></div>
-                    <div class="content-card">
-                        <div id="quiz-admin-config" style="display:none; margin-bottom:20px; background:rgba(56,189,248,0.1); padding:14px; border-radius:12px; border:1px solid #38bdf8;">
-                            <h4 style="color:#38bdf8; margin-bottom:8px;">⚙️ [어드민] 퀴즈 설정</h4>
-                            <div style="display:flex; gap:10px;">
-                                <select id="quiz-difficulty" style="margin:0;">
-                                    <option value="easy">난이도: 쉬움</option>
-                                    <option value="medium" selected>난이도: 보통</option>
-                                    <option value="hard">난이도: 어려움</option>
-                                </select>
-                                <input type="number" id="quiz-count" value="3" min="1" max="10" placeholder="문제 수" style="margin:0; width:100px;">
-                                <button onclick="saveQuizConfig()" class="btn-ui" style="flex-shrink:0;">설정 저장</button>
-                            </div>
-                        </div>
-
-                        <button onclick="generateQuiz()" class="btn-ui" style="width:100%; margin-bottom:20px;">🤖 현재 매뉴얼 기반 AI 문제 생성하기</button>
-                        <div id="quiz-container"></div>
-                    </div>
                 </div>
 
                 <div id="view-admin-m-manage" class="tab-enter" style="display:none;">
@@ -634,6 +657,46 @@ MAIN_HTML_TEMPLATE = """
     </div>
 
     <script>
+        // ==========================================
+        // 🛫 공항 플립 시계 타이머 로직
+        // ==========================================
+        let lastClockStr = "";
+
+        function updateFlipCard(id, newChar) {
+            const card = document.getElementById(id);
+            if (!card) return;
+            const inner = card.querySelector('.flip-inner');
+            if (inner.innerText !== newChar) {
+                inner.innerText = newChar;
+                card.classList.remove('animate');
+                void card.offsetWidth; // Reflow 트리거
+                card.classList.add('animate');
+            }
+        }
+
+        function updateFlipClock() {
+            const now = new Date();
+            const y = String(now.getFullYear()).padStart(4, '0');
+            const mo = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            const h = String(now.getHours()).padStart(2, '0');
+            const mi = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+
+            updateFlipCard('fc-y1', y[0]); updateFlipCard('fc-y2', y[1]);
+            updateFlipCard('fc-y3', y[2]); updateFlipCard('fc-y4', y[3]);
+            updateFlipCard('fc-mo1', mo[0]); updateFlipCard('fc-mo2', mo[1]);
+            updateFlipCard('fc-d1', d[0]); updateFlipCard('fc-d2', d[1]);
+            updateFlipCard('fc-h1', h[0]); updateFlipCard('fc-h2', h[1]);
+            updateFlipCard('fc-mi1', mi[0]); updateFlipCard('fc-mi2', mi[1]);
+            updateFlipCard('fc-s1', s[0]); updateFlipCard('fc-s2', s[1]);
+        }
+        setInterval(updateFlipClock, 1000);
+        updateFlipClock();
+
+        // ==========================================
+        // 🌌 배경 캔버스 그래픽 로직
+        // ==========================================
         const canvas = document.getElementById('bg-canvas');
         const ctx = canvas.getContext('2d');
 
@@ -694,17 +757,34 @@ MAIN_HTML_TEMPLATE = """
             const c2 = hexToRgb(hex2);
             const r = Math.round(c1[0] + (c2[0] - c1[0]) * t);
             const g = Math.round(c1[1] + (c2[1] - c1[1]) * t);
-            const b = Math.round(c1[2] + (c2[2] - c1[2]) * t);
-            return `rgb(${r}, ${g}, ${b})`;
+            return `rgb(${r}, ${g}, ${Math.round(c1[2] + (c2[2] - c1[2]) * t)})`;
         }
 
-        const stars = Array.from({ length: 120 }, () => ({
-            x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
-            size: Math.random() * 2,
+        // 별 생성
+        const stars = Array.from({ length: 150 }, () => ({
+            x: Math.random() * window.innerWidth,
+            y: Math.random() * window.innerHeight,
+            size: Math.random() * 2.2 + 0.5,
             alpha: Math.random(),
-            speed: Math.random() * 0.012 + 0.005
+            speed: Math.random() * 0.02 + 0.005,
+            twinkleFreq: Math.random() * 0.05 + 0.01
         }));
+
+        // 별똥별(Shooting Stars) 관리 배열
+        const shootingStars = [];
+
+        function spawnShootingStar() {
+            if (Math.random() < 0.08) { // 기존보다 높은 확률로 별똥별 생성
+                shootingStars.push({
+                    x: Math.random() * canvas.width * 0.8,
+                    y: Math.random() * canvas.height * 0.4,
+                    length: Math.random() * 80 + 50,
+                    speed: Math.random() * 12 + 10,
+                    angle: Math.PI / 4 + (Math.random() * 0.2 - 0.1),
+                    opacity: 1
+                });
+            }
+        }
 
         let tick = 0;
 
@@ -727,7 +807,6 @@ MAIN_HTML_TEMPLATE = """
                 ctx.closePath();
                 
                 const rayGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, rayLength);
-                
                 const r = 255;
                 const g = 250 - sunsetGlow * 80;
                 const b = 224 - sunsetGlow * 150;
@@ -742,26 +821,35 @@ MAIN_HTML_TEMPLATE = """
             ctx.restore();
         }
 
+        // 역동적인 오로라 렌더링
         function drawRibbonAurora(yOffset, waveHeight, color1, color2, speedMult, opacity) {
             if (opacity <= 0) return;
             ctx.save();
             ctx.globalAlpha = opacity;
             ctx.beginPath();
-            const startY = yOffset + Math.sin(tick * speedMult) * 20;
+            
+            const startY = yOffset + Math.sin(tick * speedMult) * 35;
             ctx.moveTo(0, startY);
-            for (let x = 0; x <= canvas.width; x += 30) {
-                const y = yOffset + Math.sin(x * 0.0025 + tick * speedMult) * waveHeight;
+            for (let x = 0; x <= canvas.width; x += 20) {
+                const y = yOffset + Math.sin(x * 0.003 + tick * speedMult * 1.5) * waveHeight 
+                                  + Math.cos(x * 0.001 + tick * speedMult * 0.8) * (waveHeight * 0.5);
                 ctx.lineTo(x, y);
             }
-            ctx.lineTo(canvas.width, startY + 200); ctx.lineTo(0, startY + 200); ctx.closePath();
-            const grad = ctx.createLinearGradient(0, yOffset - 50, canvas.width, yOffset + 200);
-            grad.addColorStop(0, color1); grad.addColorStop(1, color2);
-            ctx.fillStyle = grad; ctx.filter = 'blur(25px)'; ctx.fill(); ctx.restore();
+            ctx.lineTo(canvas.width, startY + 280); 
+            ctx.lineTo(0, startY + 280); 
+            ctx.closePath();
+            
+            const grad = ctx.createLinearGradient(0, yOffset - 50, canvas.width, yOffset + 300);
+            grad.addColorStop(0, color1); 
+            grad.addColorStop(1, color2);
+            ctx.fillStyle = grad; 
+            ctx.filter = 'blur(20px)'; 
+            ctx.fill(); 
+            ctx.restore();
         }
 
         function animate() {
-            progress += (targetProgress - progress) * 0.02;
-
+            progress += (targetProgress - progress) * 0.03; // 전환 속도 자연스럽게 보정
             const sunsetOpacity = Math.max(0, 1 - Math.abs(progress - 0.5) * 2.2);
 
             const skyTop = interpolateColor('#030509', '#38bdf8', progress);
@@ -788,8 +876,11 @@ MAIN_HTML_TEMPLATE = """
 
             tick += 0.015;
 
+            // 나이트 모드 그래픽 (별, 별자리 선, 별똥별, 오로라)
             if (progress < 0.8) {
                 const starAlphaMult = 1 - progress;
+
+                // 1. 별 그리기 및 반짝임
                 stars.forEach(s => {
                     s.alpha += s.speed;
                     if (s.alpha > 1 || s.alpha < 0) s.speed = -s.speed;
@@ -798,52 +889,95 @@ MAIN_HTML_TEMPLATE = """
                     ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
                     ctx.fill();
                 });
-            }
 
-            const auroraOpacity = 1 - progress;
-            drawRibbonAurora(canvas.height * 0.05, 65, 'rgba(0, 255, 170, 0.35)', 'rgba(0, 150, 255, 0.03)', 0.8, auroraOpacity);
-            drawRibbonAurora(canvas.height * 0.12, 85, 'rgba(0, 180, 255, 0.25)', 'rgba(140, 0, 255, 0.03)', 1.1, auroraOpacity);
-
-            if (progress > 0.01) {
-                let sunX;
-                if (!isSetting) {
-                    sunX = canvas.width * 0.1 + progress * (canvas.width * 0.4); 
-                } else {
-                    sunX = canvas.width * 0.9 - progress * (canvas.width * 0.4);
+                // 2. 별자리 선 잇기
+                ctx.strokeStyle = `rgba(0, 255, 200, ${0.12 * starAlphaMult})`;
+                ctx.lineWidth = 0.8;
+                for (let i = 0; i < stars.length; i += 4) {
+                    for (let j = i + 1; j < i + 3; j++) {
+                        if (j < stars.length) {
+                            const dist = Math.hypot(stars[i].x - stars[j].x, stars[i].y - stars[j].y);
+                            if (dist < 130) {
+                                ctx.beginPath();
+                                ctx.moveTo(stars[i].x, stars[i].y);
+                                ctx.lineTo(stars[j].x, stars[j].y);
+                                ctx.stroke();
+                            }
+                        }
+                    }
                 }
-                
-                const sunY = canvas.height * 1.1 - Math.sin(progress * Math.PI / 2) * (canvas.height * 0.85);
 
-                const r = 255;
-                const g = 245 - sunsetOpacity * 100;
-                const b = 180 - sunsetOpacity * 180;
+                // 3. 높은 확률 별똥별
+                spawnShootingStar();
+                for (let i = shootingStars.length - 1; i >= 0; i--) {
+                    const st = shootingStars[i];
+                    st.x += Math.cos(st.angle) * st.speed;
+                    st.y += Math.sin(st.angle) * st.speed;
+                    st.opacity -= 0.018;
 
-                const glowGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 350);
-                glowGrad.addColorStop(0, `rgba(${r}, ${g}, ${Math.max(0, b)}, ${0.8 * progress})`);
-                glowGrad.addColorStop(0.5, `rgba(${r}, ${g - 30}, ${Math.max(0, b - 50)}, ${0.4 * progress})`);
-                glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-                
-                ctx.fillStyle = glowGrad;
-                ctx.beginPath();
-                ctx.arc(sunX, sunY, 350, 0, Math.PI * 2);
-                ctx.fill();
+                    if (st.opacity <= 0) {
+                        shootingStars.splice(i, 1);
+                        continue;
+                    }
 
-                drawSunRays(sunX, sunY, progress, sunsetOpacity);
+                    const tailX = st.x - Math.cos(st.angle) * st.length;
+                    const tailY = st.y - Math.sin(st.angle) * st.length;
 
-                ctx.beginPath();
-                ctx.arc(sunX, sunY, 40, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(255, 253, ${235 - sunsetOpacity * 100}, ${Math.min(1, progress * 1.2)})`;
-                ctx.shadowColor = `rgba(${r}, ${g}, ${Math.max(0, b)}, 0.8)`;
-                ctx.shadowBlur = 40 + sunsetOpacity * 20;
-                ctx.fill();
-                ctx.shadowBlur = 0;
+                    const grad = ctx.createLinearGradient(st.x, st.y, tailX, tailY);
+                    grad.addColorStop(0, `rgba(255, 255, 255, ${st.opacity * starAlphaMult})`);
+                    grad.addColorStop(0.3, `rgba(0, 255, 200, ${st.opacity * 0.6 * starAlphaMult})`);
+                    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+                    ctx.strokeStyle = grad;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(st.x, st.y);
+                    ctx.lineTo(tailX, tailY);
+                    ctx.stroke();
+                }
             }
+
+            // 오로라 연출 (풍성하고 더 높게 춤추는 오로라)
+            const auroraOpacity = 1 - progress;
+            drawRibbonAurora(canvas.height * 0.05, 95, 'rgba(0, 255, 170, 0.45)', 'rgba(0, 150, 255, 0.05)', 0.9, auroraOpacity);
+            drawRibbonAurora(canvas.height * 0.12, 120, 'rgba(0, 180, 255, 0.35)', 'rgba(160, 0, 255, 0.05)', 1.2, auroraOpacity);
+            drawRibbonAurora(canvas.height * 0.20, 80, 'rgba(140, 255, 0, 0.25)', 'rgba(0, 200, 255, 0.02)', 0.7, auroraOpacity);
+
+            // 데이/나이트 원형 태양/달 움직임
+            const sunX = canvas.width * 0.1 + progress * (canvas.width * 0.8);
+            const sunY = canvas.height * 0.95 - Math.sin(progress * Math.PI) * (canvas.height * 0.75);
+
+            const r = 255;
+            const g = 245 - sunsetOpacity * 100;
+            const b = 180 - sunsetOpacity * 180;
+
+            const glowGrad = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 350);
+            glowGrad.addColorStop(0, `rgba(${r}, ${g}, ${Math.max(0, b)}, ${0.8 * progress})`);
+            glowGrad.addColorStop(0.5, `rgba(${r}, ${g - 30}, ${Math.max(0, b - 50)}, ${0.4 * progress})`);
+            glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            
+            ctx.fillStyle = glowGrad;
+            ctx.beginPath();
+            ctx.arc(sunX, sunY, 350, 0, Math.PI * 2);
+            ctx.fill();
+
+            drawSunRays(sunX, sunY, progress, sunsetOpacity);
+
+            ctx.beginPath();
+            ctx.arc(sunX, sunY, 38, 0, Math.PI * 2);
+            ctx.fillStyle = progress > 0.5 
+                ? `rgba(255, 253, ${235 - sunsetOpacity * 100}, ${Math.min(1, progress * 1.2)})`
+                : `rgba(240, 245, 255, ${1 - progress})`;
+            ctx.shadowColor = `rgba(${r}, ${g}, ${Math.max(0, b)}, 0.8)`;
+            ctx.shadowBlur = 40 + sunsetOpacity * 20;
+            ctx.fill();
+            ctx.shadowBlur = 0;
 
             requestAnimationFrame(animate);
         }
         animate();
 
-        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [], quiz_config: {difficulty:'medium', count:3} };
+        let appState = { user: null, role: null, manuals: [], user_whitelist: [], user_blacklist: [], admin_whitelist: [], user_profiles: {}, logs: [] };
         let selectedManualIndex = 0;
         let currentActiveTabId = 'view-manual';
         let hasIntroRun = false;
@@ -858,7 +992,6 @@ MAIN_HTML_TEMPLATE = """
 
         function processYoutubeEmbeds(content, enablePreview) {
             if (!content) return '';
-            
             const ytRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[^\s<]*)?/g;
 
             if (enablePreview) {
@@ -955,17 +1088,10 @@ MAIN_HTML_TEMPLATE = """
                 roleBadge.innerText = 'ADMIN';
                 roleBadge.className = 'badge-admin';
                 document.getElementById('admin-menu-section').style.display = 'block';
-                document.getElementById('quiz-admin-config').style.display = 'block';
-                
-                if (data.quiz_config) {
-                    document.getElementById('quiz-difficulty').value = data.quiz_config.difficulty || 'medium';
-                    document.getElementById('quiz-count').value = data.quiz_config.count || 3;
-                }
             } else {
                 roleBadge.innerText = 'STAFF';
                 roleBadge.className = 'badge-staff';
                 document.getElementById('admin-menu-section').style.display = 'none';
-                document.getElementById('quiz-admin-config').style.display = 'none';
             }
 
             renderCategorizedSidebar();
@@ -1151,75 +1277,6 @@ MAIN_HTML_TEMPLATE = """
             if (navEl) navEl.classList.add('active');
             
             transitionToTab(`view-admin-${tabName}`);
-        }
-
-        async function generateQuiz() {
-            const container = document.getElementById('quiz-container');
-            container.innerHTML = '<div style="text-align:center; padding:20px; color:#00ffaa;">🤖 AI가 매뉴얼을 분석하여 퀴즈를 생성하고 있습니다...</div>';
-
-            const res = await fetch('/api/quiz/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ manual_index: selectedManualIndex })
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                renderQuiz(data.questions);
-            } else {
-                container.innerHTML = '<div style="color:#ff2d55; padding:10px;">퀴즈 생성에 실패했습니다. (OpenAI API 키 설정 확인 필요)</div>';
-            }
-        }
-
-        function renderQuiz(questions) {
-            const container = document.getElementById('quiz-container');
-            if (!questions || questions.length === 0) {
-                container.innerHTML = '<div>생성된 문제가 없습니다.</div>';
-                return;
-            }
-
-            container.innerHTML = questions.map((q, qIdx) => `
-                <div style="background:rgba(0,0,0,0.2); padding:16px; border-radius:12px; margin-bottom:16px; border:1px solid rgba(125,125,125,0.2);">
-                    <div style="font-weight:bold; margin-bottom:10px; color:var(--text-main);">Q${qIdx+1}. ${q.question}</div>
-                    <div>
-                        ${q.options.map((opt, oIdx) => `
-                            <label style="display:block; padding:8px 12px; background:var(--btn-item-bg); margin-bottom:6px; border-radius:8px; cursor:pointer;">
-                                <input type="radio" name="q_${qIdx}" value="${oIdx}" style="width:auto; margin-right:8px;"> ${opt}
-                            </label>
-                        `).join('')}
-                    </div>
-                    <button class="btn-ui btn-secondary" style="margin-top:8px; padding:4px 10px; font-size:12px;" onclick="checkAnswer(${qIdx}, ${q.answer_index}, '${q.explanation}')">정답 확인</button>
-                    <div id="quiz-result-${qIdx}" style="margin-top:8px; font-size:13px;"></div>
-                </div>
-            `).join('');
-        }
-
-        function checkAnswer(qIdx, correctIdx, explanation) {
-            const selected = document.querySelector(`input[name="q_${qIdx}"]:checked`);
-            const resDiv = document.getElementById(`quiz-result-${qIdx}`);
-            if (!selected) return showNotification("답을 선택해주세요!");
-
-            if (parseInt(selected.value) === correctIdx) {
-                resDiv.innerHTML = `<span style="color:#4ade80; font-weight:bold;">⭕ 정답입니다!</span><br/><span style="color:var(--text-sub);">${explanation}</span>`;
-            } else {
-                resDiv.innerHTML = `<span style="color:#f87171; font-weight:bold;">❌ 오답입니다.</span><br/><span style="color:var(--text-sub);">${explanation}</span>`;
-            }
-        }
-
-        async function saveQuizConfig() {
-            const difficulty = document.getElementById('quiz-difficulty').value;
-            const count = parseInt(document.getElementById('quiz-count').value);
-
-            const res = await fetch('/api/admin/quiz_config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ difficulty, count })
-            });
-
-            if (res.ok) {
-                showNotification("퀴즈 설정이 저장되었습니다.");
-                syncSystemState();
-            }
         }
 
         function maskId(idStr) {
@@ -1434,9 +1491,9 @@ MAIN_HTML_TEMPLATE = """
 
         async function updatePermission(target, action, explicitId = null) {
             const userId = explicitId || document.getElementById('perm-target-id').value.trim();
-            const isAdmin = document.getElementById('perm-is-admin') ? document.getElementById('perm-is-admin').checked : false;
+            const isAdmin = document.getElementById('perm-is-admin').checked;
 
-            if (!userId) return showNotification("대상 디스코드 ID를 입력해주세요.");
+            if (!userId) return showNotification("디스코드 유저 ID를 입력해주세요.");
 
             const res = await fetch('/api/admin/permission', {
                 method: 'POST',
@@ -1445,494 +1502,289 @@ MAIN_HTML_TEMPLATE = """
             });
 
             if (res.ok) {
-                showNotification("권한 설정이 업데이트되었습니다.");
-                if (!explicitId) document.getElementById('perm-target-id').value = '';
+                showNotification(`권한 변경 완료: ${target} (${action})`);
+                if (!explicitId) {
+                    document.getElementById('perm-target-id').value = '';
+                    document.getElementById('searched-user-card').style.display = 'none';
+                }
                 syncSystemState();
             }
         }
 
-        syncSystemState();
+        window.onload = syncSystemState;
     </script>
 </body>
 </html>
 """
 
 # --------------------------------------------------
-# Flask 라우트 정의
+# 🛣️ Flask 라우트 정의
 # --------------------------------------------------
-@app.route('/')
+@app.route("/")
 def index():
     return render_template_string(MAIN_HTML_TEMPLATE, client_id=CLIENT_ID)
 
-@app.route('/callback')
+@app.route("/callback")
 def callback():
-    code = request.args.get('code')
+    code = request.args.get("code")
     if not code:
-        return redirect('/')
+        return redirect("/")
 
-    token_url = "https://discord.com/api/oauth2/token"
-    data = {
-        'client_id': CLIENT_ID,
-        'client_secret': CLIENT_SECRET,
-        'grant_type': 'authorization_code',
-        'code': code,
-        'redirect_uri': f"{BASE_URL}/callback"
-    }
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-    res = requests.post(token_url, data=data, headers=headers)
+    redirect_uri = f"{BASE_URL}/callback"
     
-    if res.status_code == 200:
-        token_data = res.json()
-        access_token = token_data.get('access_token')
+    token_res = requests.post("https://discord.com/api/oauth2/token", data={
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri
+    }, headers={"Content-Type": "application/x-www-form-urlencoded"})
 
-        user_res = requests.get("https://discord.com/api/users/@me", headers={'Authorization': f'Bearer {access_token}'})
-        if user_res.status_code == 200:
-            user_info = user_res.json()
-            session['user'] = user_info
-            
-            db = load_data()
-            user_id = user_info['id']
-            avatar_hash = user_info.get('avatar')
-            avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png" if avatar_hash else "https://cdn.discordapp.com/embed/avatars/0.png"
-            
-            db.setdefault("user_profiles", {})[user_id] = {
-                "id": user_id,
-                "username": user_info.get("username"),
-                "global_name": user_info.get("global_name") or user_info.get("username"),
-                "avatar_url": avatar_url
-            }
-            
-            user_name = user_info.get('global_name') or user_info.get('username')
-            add_log(db, "인증", user_name, f"디스코드 로그인 완료 (ID: {user_id})")
-            save_data(db)
+    if token_res.status_code != 200:
+        return redirect("/")
 
-    return redirect('/')
-
-@app.route('/logout')
-def logout():
-    session.pop('user', None)
-    return redirect('/')
-
-@app.route('/api/state')
-def get_state():
-    user = session.get('user')
-    if not user:
-        return jsonify({"status": "unauthorized"})
-
-    db = load_data()
-    user_id = user['id']
-
-    if user_id in db.get("user_blacklist", []):
-        session.pop('user', None)
-        return jsonify({"status": "forbidden", "message": "Blacklisted"}), 403
-
-    role = "guest"
-    if user_id in db.get("admin_whitelist", []):
-        role = "admin"
-    elif user_id in db.get("user_whitelist", []):
-        role = "staff"
-
-    return jsonify({
-        "status": "success",
-        "user": user,
-        "role": role,
-        "manuals": db.get("manuals", []),
-        "user_whitelist": db.get("user_whitelist", []),
-        "user_blacklist": db.get("user_blacklist", []),
-        "admin_whitelist": db.get("admin_whitelist", []),
-        "user_profiles": db.get("user_profiles", {}),
-        "logs": db.get("logs", [])[:50],
-        "quiz_config": db.get("quiz_config", {"difficulty": "medium", "count": 3})
+    access_token = token_res.json().get("access_token")
+    user_res = requests.get("https://discord.com/api/users/@me", headers={
+        "Authorization": f"Bearer {access_token}"
     })
 
-@app.route('/api/log/action', methods=['POST'])
-def log_action():
-    user = session.get('user')
-    if not user:
-        return jsonify({"status": "unauthorized"}), 401
-
-    req_data = request.json or {}
-    action = req_data.get('action', '알 수 없는 작업')
-    device = req_data.get('device', 'PC')
-
-    db = load_data()
-    user_name = user.get('global_name') or user.get('username')
-    add_log(db, "보안감시", user_name, action, device)
-    save_data(db)
-
-    return jsonify({"status": "success"})
-
-@app.route('/api/admin/manual', methods=['POST'])
-def save_manual():
-    user = session.get('user')
-    if not user:
-        return jsonify({"status": "unauthorized"}), 401
-
-    db = load_data()
-    if user['id'] not in db.get("admin_whitelist", []):
-        return jsonify({"status": "forbidden"}), 403
-
-    req = request.json
-    index = req.get('index', -1)
-    category = req.get('category', '공통 매뉴얼')
-    pinned = req.get('pinned', False)
-    title = req.get('title')
-    content = req.get('content')
-
-    manuals = db.get("manuals", [])
-    
-    if 0 <= index < len(manuals):
-        manuals[index] = {
-            "id": manuals[index].get("id", len(manuals) + 1),
-            "category": category,
-            "pinned": pinned,
-            "title": title,
-            "content": content
+    if user_res.status_code == 200:
+        session["user"] = user_res.json()
+        
+        data = load_data()
+        user_id = str(session["user"]["id"])
+        user_name = session["user"].get("global_name") or session["user"].get("username")
+        
+        if "user_profiles" not in data: data["user_profiles"] = {}
+        data["user_profiles"][user_id] = {
+            "username": session["user"].get("username"),
+            "global_name": session["user"].get("global_name") or session["user"].get("username"),
+            "avatar_url": f"https://cdn.discordapp.com/avatars/{user_id}/{session['user'].get('avatar')}.png" if session["user"].get("avatar") else "https://cdn.discordapp.com/embed/avatars/0.png"
         }
-        action_msg = f"매뉴얼 수정 [{title}]"
+
+        add_log(data, "인증", user_name, f"시스템 로그인 성공 (ID: {user_id})")
+        save_data(data)
+
+    return redirect("/")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
+
+@app.route("/api/state")
+def get_state():
+    user = session.get("user")
+    if not user:
+        return jsonify({"status": "unauthorized"}), 200
+
+    data = load_data()
+    user_id = str(user.get("id"))
+
+    if user_id in data.get("user_blacklist", []):
+        session.clear()
+        return jsonify({"error": "blacklisted"}), 403
+
+    role = "guest"
+    if user_id in data.get("admin_whitelist", DEFAULT_ADMINS):
+        role = "admin"
+    elif user_id in data.get("user_whitelist", []):
+        role = "staff"
     else:
-        new_id = max([m.get("id", 0) for m in manuals], default=0) + 1
-        manuals.append({
-            "id": new_id,
-            "category": category,
-            "pinned": pinned,
-            "title": title,
-            "content": content
-        })
-        action_msg = f"새 매뉴얼 등록 [{title}]"
+        session.clear()
+        return jsonify({"error": "not_authorized"}), 403
 
-    db["manuals"] = manuals
-    user_name = user.get('global_name') or user.get('username')
-    add_log(db, "매뉴얼", user_name, action_msg)
-    save_data(db)
+    return jsonify({
+        "user": user,
+        "role": role,
+        "manuals": data.get("manuals", []),
+        "user_whitelist": data.get("user_whitelist", []) if role == "admin" else [],
+        "user_blacklist": data.get("user_blacklist", []) if role == "admin" else [],
+        "admin_whitelist": data.get("admin_whitelist", []) if role == "admin" else [],
+        "user_profiles": data.get("user_profiles", {}),
+        "logs": data.get("logs", []) if role == "admin" else []
+    })
 
-    return jsonify({"status": "success"})
-
-@app.route('/api/admin/manual/delete', methods=['POST'])
-def delete_manual():
-    user = session.get('user')
-    if not user:
-        return jsonify({"status": "unauthorized"}), 401
-
-    db = load_data()
-    if user['id'] not in db.get("admin_whitelist", []):
-        return jsonify({"status": "forbidden"}), 403
-
-    index = request.json.get('index', -1)
-    manuals = db.get("manuals", [])
-
-    if 0 <= index < len(manuals):
-        deleted = manuals.pop(index)
-        db["manuals"] = manuals
-        user_name = user.get('global_name') or user.get('username')
-        add_log(db, "매뉴얼", user_name, f"매뉴얼 삭제 [{deleted.get('title')}]")
-        save_data(db)
-        return jsonify({"status": "success"})
-
-    return jsonify({"status": "invalid_index"}), 400
-
-@app.route('/api/admin/permission', methods=['POST'])
-def update_permission():
-    user = session.get('user')
-    if not user:
-        return jsonify({"status": "unauthorized"}), 401
-
-    db = load_data()
-    if user['id'] not in db.get("admin_whitelist", []):
-        return jsonify({"status": "forbidden"}), 403
-
-    req = request.json
-    target = req.get('target')
-    action = req.get('action')
-    target_user_id = str(req.get('user_id')).strip()
-    is_admin = req.get('is_admin', False)
-
-    wl = db.get("user_whitelist", [])
-    bl = db.get("user_blacklist", [])
-    al = db.get("admin_whitelist", [])
-
-    if target == 'whitelist':
-        if action == 'add':
-            if target_user_id not in wl:
-                wl.append(target_user_id)
-            if target_user_id in bl:
-                bl.remove(target_user_id)
-            if is_admin and target_user_id not in al:
-                al.append(target_user_id)
-            elif not is_admin and target_user_id in al and target_user_id not in DEFAULT_ADMINS:
-                al.remove(target_user_id)
-        elif action == 'remove':
-            if target_user_id in wl:
-                wl.remove(target_user_id)
-            if target_user_id in al and target_user_id not in DEFAULT_ADMINS:
-                al.remove(target_user_id)
-
-    elif target == 'blacklist':
-        if action == 'add':
-            if target_user_id not in bl:
-                bl.append(target_user_id)
-            if target_user_id in wl:
-                wl.remove(target_user_id)
-            if target_user_id in al and target_user_id not in DEFAULT_ADMINS:
-                al.remove(target_user_id)
-        elif action == 'remove':
-            if target_user_id in bl:
-                bl.remove(target_user_id)
-
-    db["user_whitelist"] = wl
-    db["user_blacklist"] = bl
-    db["admin_whitelist"] = al
-
-    user_name = user.get('global_name') or user.get('username')
-    add_log(db, "권한변경", user_name, f"권한 업데이트 -> 대상 ID: {target_user_id} ({target}:{action})")
-    save_data(db)
-
-    return jsonify({"status": "success"})
-
-@app.route('/api/admin/permission/batch', methods=['POST'])
-def batch_permission():
-    user = session.get('user')
-    if not user:
-        return jsonify({"status": "unauthorized"}), 401
-
-    db = load_data()
-    if user['id'] not in db.get("admin_whitelist", []):
-        return jsonify({"status": "forbidden"}), 403
-
-    req = request.json
-    user_ids = req.get('user_ids', [])
-    action = req.get('action')
-
-    wl = db.get("user_whitelist", [])
-    bl = db.get("user_blacklist", [])
-    al = db.get("admin_whitelist", [])
-
-    for uid in user_ids:
-        uid = str(uid).strip()
-        if action == 'admin_upgrade':
-            if uid not in al:
-                al.append(uid)
-            if uid not in wl:
-                wl.append(uid)
-            if uid in bl:
-                bl.remove(uid)
-        elif action == 'admin_demote':
-            if uid in al and uid not in DEFAULT_ADMINS:
-                al.remove(uid)
-        elif action == 'blacklist':
-            if uid not in bl:
-                bl.append(uid)
-            if uid in wl:
-                wl.remove(uid)
-            if uid in al and uid not in DEFAULT_ADMINS:
-                al.remove(uid)
-        elif action == 'remove':
-            if uid in wl:
-                wl.remove(uid)
-            if uid in bl:
-                bl.remove(uid)
-            if uid in al and uid not in DEFAULT_ADMINS:
-                al.remove(uid)
-
-    db["user_whitelist"] = wl
-    db["user_blacklist"] = bl
-    db["admin_whitelist"] = al
-
-    user_name = user.get('global_name') or user.get('username')
-    add_log(db, "권한변경", user_name, f"일괄 권한 변경 실행 ({action}) -> {len(user_ids)}명 대상")
-    save_data(db)
-
-    return jsonify({"status": "success"})
-
-@app.route('/api/admin/user_info/<user_id>')
+@app.route("/api/admin/user_info/<user_id>")
 def get_user_info(user_id):
-    user = session.get('user')
+    user = session.get("user")
     if not user:
-        return jsonify({"status": "unauthorized"}), 401
+        return jsonify({"error": "unauthorized"}), 401
 
-    db = load_data()
-    if user['id'] not in db.get("admin_whitelist", []):
-        return jsonify({"status": "forbidden"}), 403
+    data = load_data()
+    profiles = data.get("user_profiles", {})
 
-    profiles = db.get("user_profiles", {})
     if user_id in profiles:
-        return jsonify(profiles[user_id])
-
-    bot_token = os.environ.get("DISCORD_BOT_TOKEN")
-    if bot_token:
-        headers = {"Authorization": f"Bot {bot_token}"}
-        res = requests.get(f"https://discord.com/api/v10/users/{user_id}", headers=headers)
-        if res.status_code == 200:
-            u = res.json()
-            avatar_hash = u.get("avatar")
-            avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png" if avatar_hash else "https://cdn.discordapp.com/embed/avatars/0.png"
-            prof = {
-                "id": user_id,
-                "username": u.get("username"),
-                "global_name": u.get("global_name") or u.get("username"),
-                "avatar_url": avatar_url
-            }
-            profiles[user_id] = prof
-            db["user_profiles"] = profiles
-            save_data(db)
-            return jsonify(prof)
+        prof = profiles[user_id]
+        return jsonify({"id": user_id, "username": prof.get("username"), "global_name": prof.get("global_name"), "avatar_url": prof.get("avatar_url")})
 
     return jsonify({
         "id": user_id,
-        "username": "Unknown User",
-        "global_name": "미확인 유저",
+        "username": f"user_{user_id[-4:]}",
+        "global_name": f"스태프 ({user_id[-4:]})",
         "avatar_url": "https://cdn.discordapp.com/embed/avatars/0.png"
     })
 
-@app.route('/api/admin/quiz_config', methods=['POST'])
-def set_quiz_config():
-    user = session.get('user')
+@app.route("/api/log/action", methods=["POST"])
+def log_action():
+    user = session.get("user")
     if not user:
-        return jsonify({"status": "unauthorized"}), 401
+        return jsonify({"status": "ignored"}), 200
 
-    db = load_data()
-    if user['id'] not in db.get("admin_whitelist", []):
-        return jsonify({"status": "forbidden"}), 403
+    data = load_data()
+    req_data = request.json or {}
+    action = req_data.get("action", "알 수 없는 행동")
+    device = req_data.get("device", "PC")
+    user_name = user.get("global_name") or user.get("username")
 
-    req = request.json
-    db["quiz_config"] = {
-        "difficulty": req.get("difficulty", "medium"),
-        "count": int(req.get("count", 3))
+    add_log(data, "보안 감지", user_name, action, device_type=device)
+    save_data(data)
+    return jsonify({"status": "logged"})
+
+@app.route("/api/admin/manual", methods=["POST"])
+def admin_manual():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
+
+    req_data = request.json or {}
+    idx = req_data.get("index")
+    category = req_data.get("category", "공통 매뉴얼")
+    pinned = req_data.get("pinned", False)
+    title = req_data.get("title")
+    content = req_data.get("content")
+
+    user_name = user.get("global_name") or user.get("username")
+    manual_item = {
+        "id": int(datetime.datetime.now().timestamp()),
+        "category": category,
+        "pinned": pinned,
+        "title": title,
+        "content": content
     }
-    save_data(db)
+
+    if idx is not None and 0 <= idx < len(data["manuals"]):
+        data["manuals"][idx] = manual_item
+        add_log(data, "매뉴얼 수정", user_name, f"매뉴얼 '{title}' 수정 완료")
+    else:
+        data["manuals"].append(manual_item)
+        add_log(data, "매뉴얼 등록", user_name, f"새 매뉴얼 '{title}' 등록 완료")
+
+    save_data(data)
     return jsonify({"status": "success"})
 
-@app.route('/api/quiz/generate', methods=['POST'])
-def generate_quiz_api():
-    user = session.get('user')
+@app.route("/api/admin/manual/delete", methods=["POST"])
+def admin_manual_delete():
+    user = session.get("user")
     if not user:
-        return jsonify({"status": "unauthorized"}), 401
+        return jsonify({"error": "unauthorized"}), 401
 
-    db = load_data()
-    req = request.json
-    idx = req.get("manual_index", 0)
-    manuals = db.get("manuals", [])
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
 
-    if not (0 <= idx < len(manuals)):
-        return jsonify({"status": "invalid_manual"}), 400
+    idx = request.json.get("index")
+    if idx is not None and 0 <= idx < len(data["manuals"]):
+        deleted = data["manuals"].pop(idx)
+        user_name = user.get("global_name") or user.get("username")
+        add_log(data, "매뉴얼 삭제", user_name, f"매뉴얼 '{deleted.get('title')}' 삭제 완료")
+        save_data(data)
 
-    target_manual = manuals[idx]
-    config = db.get("quiz_config", {"difficulty": "medium", "count": 3})
+    return jsonify({"status": "success"})
 
-    if not OPENAI_API_KEY:
-        return jsonify({"status": "no_openai_key"}), 500
+@app.route("/api/admin/permission", methods=["POST"])
+def admin_permission():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
 
-    prompt = f"""
-다음 매뉴얼 내용을 기반으로 이해도 점검 퀴즈 {config['count']}문제를 생성해 주세요.
-난이도: {config['difficulty']}
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
 
-[매뉴얼 내용]
-제목: {target_manual.get('title')}
-내용: {target_manual.get('content')}
+    target = request.json.get("target")
+    action = request.json.get("action")
+    target_id = str(request.json.get("user_id"))
+    is_admin = request.json.get("is_admin", False)
 
-응답은 반드시 아래 형식의 JSON 배열 객체로만 출력하세요. 다른 텍스트는 포함하지 마세요.
-[
-  {{
-    "question": "문제 내용",
-    "options": ["보기1", "보기2", "보기3", "보기4"],
-    "answer_index": 0,
-    "explanation": "해설 내용"
-  }}
-]
-"""
-    try:
-        headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "gpt-4o-mini",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7
-        }
-        res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=15)
-        if res.status_code == 200:
-            result_text = res.json()['choices'][0]['message']['content'].strip()
-            if result_text.startswith("```json"):
-                result_text = result_text.replace("```json", "").replace("```", "").strip()
-            questions = json.loads(result_text)
-            return jsonify({"status": "success", "questions": questions})
-        else:
-            return jsonify({"status": "openai_error", "details": res.text}), 500
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    if target == "whitelist":
+        if action == "add":
+            if "user_whitelist" not in data: data["user_whitelist"] = []
+            if target_id not in data["user_whitelist"]:
+                data["user_whitelist"].append(target_id)
+            if "user_blacklist" in data and target_id in data["user_blacklist"]:
+                data["user_blacklist"].remove(target_id)
 
+            if is_admin:
+                if "admin_whitelist" not in data: data["admin_whitelist"] = []
+                if target_id not in data["admin_whitelist"]:
+                    data["admin_whitelist"].append(target_id)
 
-# ==========================================
-# 2. Pygame 인터랙티브 보드 그래픽 클래스
-# ==========================================
-class FlipTile:
-    def __init__(self, x, y, w, h, font):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.current_char = ""
-        self.target_char = ""
-        self.flip_progress = 1.0
-        self.font = font
+        elif action == "remove":
+            if "user_whitelist" in data and target_id in data["user_whitelist"]:
+                data["user_whitelist"].remove(target_id)
 
-    def set_char(self, char):
-        if self.target_char != char:
-            self.target_char = char
-            self.flip_progress = 0.0
+    elif target == "blacklist":
+        if action == "add":
+            if "user_blacklist" not in data: data["user_blacklist"] = []
+            if target_id not in data["user_blacklist"]:
+                data["user_blacklist"].append(target_id)
+            if "user_whitelist" in data and target_id in data["user_whitelist"]:
+                data["user_whitelist"].remove(target_id)
+            if "admin_whitelist" in data and target_id in data["admin_whitelist"] and target_id not in DEFAULT_ADMINS:
+                data["admin_whitelist"].remove(target_id)
 
-    def update(self):
-        if self.flip_progress < 1.0:
-            self.flip_progress += 0.25
-            if self.flip_progress >= 0.5 and self.current_char != self.target_char:
-                self.current_char = self.target_char
-            if self.flip_progress >= 1.0:
-                self.flip_progress = 1.0
+        elif action == "remove":
+            if "user_blacklist" in data and target_id in data["user_blacklist"]:
+                data["user_blacklist"].remove(target_id)
 
-    def draw(self, surface):
-        pygame.draw.rect(surface, (20, 22, 28), self.rect, border_radius=4)
-        pygame.draw.rect(surface, (45, 50, 60), self.rect, 1, border_radius=4)
+    save_data(data)
+    return jsonify({"status": "success"})
 
-        cy = self.rect.centery
-        pygame.draw.line(surface, (10, 10, 12), (self.rect.left, cy), (self.rect.right, cy), 1)
+@app.route("/api/admin/permission/batch", methods=["POST"])
+def admin_permission_batch():
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
 
-        if self.current_char:
-            txt = self.font.render(self.current_char, True, (240, 240, 240))
-            txt_rect = txt.get_rect(center=self.rect.center)
-            surface.blit(txt, txt_rect)
+    data = load_data()
+    if str(user.get("id")) not in data.get("admin_whitelist", DEFAULT_ADMINS):
+        return jsonify({"error": "forbidden"}), 403
 
+    user_ids = request.json.get("user_ids", [])
+    action = request.json.get("action")
+    user_name = user.get("global_name") or user.get("username")
 
-class ToggleSwitch:
-    def __init__(self, x, y, width=64, height=32):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.is_night = True
-        self.handle_x = x + width - height / 2
-        self.target_x = self.handle_x
-        self.radius = (height - 6) // 2
+    for uid in user_ids:
+        uid = str(uid)
+        if action == "admin_upgrade":
+            if uid not in data.get("admin_whitelist", []):
+                data.setdefault("admin_whitelist", []).append(uid)
+            if uid not in data.get("user_whitelist", []):
+                data.setdefault("user_whitelist", []).append(uid)
+        elif action == "admin_demote":
+            if uid in data.get("admin_whitelist", []) and uid not in DEFAULT_ADMINS:
+                data["admin_whitelist"].remove(uid)
+        elif action == "blacklist":
+            if uid not in data.get("user_blacklist", []):
+                data.setdefault("user_blacklist", []).append(uid)
+            if uid in data.get("user_whitelist", []):
+                data["user_whitelist"].remove(uid)
+            if uid in data.get("admin_whitelist", []) and uid not in DEFAULT_ADMINS:
+                data["admin_whitelist"].remove(uid)
+        elif action == "remove":
+            if uid in data.get("user_whitelist", []):
+                data["user_whitelist"].remove(uid)
+            if uid in data.get("blacklist", []):
+                data["user_blacklist"].remove(uid)
 
-    def toggle(self):
-        self.is_night = not self.is_night
-        if self.is_night:
-            self.target_x = self.rect.x + self.rect.width - self.rect.height / 2
-        else:
-            self.target_x = self.rect.x + self.rect.height / 2
+    add_log(data, "일괄 권한 변경", user_name, f"유저 {len(user_ids)}명에 대해 '{action}' 처리 수행")
+    save_data(data)
+    return jsonify({"status": "success"})
 
-    def update(self):
-        self.handle_x += (self.target_x - self.handle_x) * 0.3
-
-    def draw(self, surface):
-        bg_color = (35, 40, 55) if self.is_night else (180, 210, 240)
-        handle_color = (240, 240, 250) if self.is_night else (255, 190, 40)
-
-        pygame.draw.rect(surface, bg_color, self.rect, border_radius=16)
-        pygame.draw.rect(surface, (80, 90, 110), self.rect, 2, border_radius=16)
-        pygame.draw.circle(
-            surface,
-            handle_color,
-            (int(self.handle_x), self.rect.centery),
-            self.radius
-        )
-
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
-    
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
